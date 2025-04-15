@@ -549,8 +549,12 @@ protected:
                 editor->getLevelString();
                 auto pause = EditorPauseLayer::create(editor);
                 pause->saveLevel();
-                gmd::exportLevelFile(editor->m_level, related_File);
-                Notification::create("level saved to file!", NotificationIcon::Info)->show();
+                auto result = gmd::exportLevelFile(editor->m_level, related_File);
+                if (result.isErr()) Notification::create(
+                    "failed to export level: " + result.err().value_or("unknown error"),
+                    NotificationIcon::Error
+                )->show();
+                else Notification::create("level saved to file!", NotificationIcon::Info)->show();
             }
         );
         save_level->m_scaleMultiplier = 0.95;
@@ -728,7 +732,7 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
                         {
                             if (auto result = event->getValue()) if (result->isOk()) {
                                 auto path = result->unwrap();
-                                path = string::endsWith(path.string(), ".level") ? path : path.string() + ".level";
+                                path = string::endsWith(path.string(), ".level") ? path : std::filesystem::path(path.string() + ".level");
                                 auto level_import = gmd::importLevelFile(path);
                                 if (level_import.isOk()) {
                                     auto level = level_import.unwrapOrDefault();
@@ -799,7 +803,7 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
                         {
                             if (auto result = event->getValue()) if (result->isOk()) {
                                 auto path = result->unwrap();
-                                path = string::endsWith(path.string(), ".level") ? path : path.string() + ".level";
+                                path = string::endsWith(path.string(), ".level") ? path : std::filesystem::path(path.string() + ".level");
                                 auto level_import = gmd::importLevelFile(path);
                                 if (level_import.isOk()) {
                                     auto level = level_import.unwrapOrDefault();
@@ -930,7 +934,7 @@ class $nodeModify(MLE_PauseExt, PauseLayer) {
         if (auto menu = this->getChildByIDRecursive("bottom-button-menu")) {
             CCMenuItemSpriteExtra* export_level = CCMenuItemExt::createSpriteExtra(
                 SimpleTextArea::create("export into .level file")->getLines()[0],
-                [this](auto) {
+                [this](CCMenuItem*) {
                     auto level = GameManager::get()->getPlayLayer()->m_level;
                     auto IMPORT_PICK_OPTIONS = file::FilePickOptions{
                         std::nullopt, {{ "Extended Shared Level File", { "*.level" } }}
@@ -941,8 +945,8 @@ class $nodeModify(MLE_PauseExt, PauseLayer) {
                             if (auto result = event->getValue()) if (result->isOk()) {
                                 //path
                                 auto path = string::endsWith( //result->unwrap()result->unwrap()result->unwrap()
-                                    result->unwrap().string(), ".level"
-                                ) ? result->unwrap() : result->unwrap().string() + ".level";
+                                    result->unwrapOrDefault().string(), ".level" //str ends w .lvl
+                                ) ? result->unwrapOrDefault() : result->unwrapOrDefault().string() + ".level";
                                 //dir
                                 auto dir = path.parent_path();
                                 //exporting.
