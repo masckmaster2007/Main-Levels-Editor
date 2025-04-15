@@ -900,7 +900,7 @@ class $modify(MLE_LevelPageExt, LevelPage) {
         
     }
 
-#if GEODE_IS_IOS
+#ifdef GEODE_IS_IOS
     //no bindings
 #else
 
