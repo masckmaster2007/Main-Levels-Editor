@@ -21,8 +21,8 @@ namespace gmd {
         json["levelString"] = level->m_levelString.c_str();
         json["creatorName"] = level->m_creatorName.c_str();
         json["recordString"] = level->m_recordString.c_str();
-        json["uploadDate"] = level->m_uploadDate;
-        json["updateDate"] = level->m_updateDate;
+        json["uploadDate"] = level->m_uploadDate.c_str();
+        json["updateDate"] = level->m_updateDate.c_str();
         json["unkString1"] = level->m_unkString1.c_str();
         json["unkString2"] = level->m_unkString2.c_str();
         { // CCPoint m_unkPoint
