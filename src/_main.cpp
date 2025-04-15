@@ -946,7 +946,7 @@ class $nodeModify(MLE_PauseExt, PauseLayer) {
                                 //path
                                 auto path = string::endsWith( //result->unwrap()result->unwrap()result->unwrap()
                                     result->unwrapOrDefault().string(), ".level" //str ends w .lvl
-                                ) ? result->unwrapOrDefault() : result->unwrapOrDefault().string() + ".level";
+                                ) ? result->unwrapOrDefault() : std::filesystem::path(result->unwrapOrDefault().string() + ".level");
                                 //dir
                                 auto dir = path.parent_path();
                                 //exporting.
