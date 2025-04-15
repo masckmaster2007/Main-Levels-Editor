@@ -737,9 +737,9 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
                                 if (level_import.isOk()) {
                                     auto level = level_import.unwrapOrDefault();
                                     auto pages = CCArray::create();
-                                    pages->addObjectNew(LevelInfoLayer::create(level, 0));
-                                    pages->addObjectNew(EditLevelLayer::create(level));
-                                    pages->addObjectNew([level] {
+                                    pages->addObject(LevelInfoLayer::create(level, 0));
+                                    pages->addObject(EditLevelLayer::create(level));
+                                    pages->addObject([level] {
                                         auto a = LevelPage::create(level);
                                         a->updateDynamicPage(level);
                                         return a;
@@ -859,7 +859,7 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
 
         //LEVELS_LISTING
         for (auto id : mle::getListingIDs()) {
-            m_scrollLayer->m_dynamicObjects->addObjectNew(GameLevelManager::get()->getMainLevel(id, 0));
+            m_scrollLayer->m_dynamicObjects->addObject(GameLevelManager::get()->getMainLevel(id, 0));
         }
         m_scrollLayer->setupDynamicScrolling(m_scrollLayer->m_dynamicObjects, this);
         m_scrollLayer->moveToPage(m_scrollLayer->m_page);
@@ -891,6 +891,11 @@ class $modify(MLE_LevelPageExt, LevelPage) {
         }
     }
 
+
+#ifdef GEODE_IS_IOS
+    //no bindings
+#else
+
     void onPlay(cocos2d::CCObject * sender) {
         if (this) if (auto a = getParent()) if (auto scroll = typeinfo_cast<BoomScrollLayer*>(a->getParent())) {
             MLE_LevelSelectExt::LastPlayedPage = scroll->pageNumberForPosition(this->getPosition());
@@ -899,10 +904,6 @@ class $modify(MLE_LevelPageExt, LevelPage) {
         LevelPage::onPlay(sender);
         
     }
-
-#ifdef GEODE_IS_IOS
-    //no bindings
-#else
 
     void onSecretDoor(cocos2d::CCObject * sender) {
         if (this) if (auto a = getParent()) if (auto scroll = typeinfo_cast<BoomScrollLayer*>(a->getParent())) {
