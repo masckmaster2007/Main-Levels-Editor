@@ -662,8 +662,6 @@ class $modify(MLE_LevelTools, LevelTools) {
 };
 
 
-
-
 #include <Geode/modify/LevelSelectLayer.hpp>
 class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
 
@@ -891,11 +889,6 @@ class $modify(MLE_LevelPageExt, LevelPage) {
         }
     }
 
-
-#ifdef GEODE_IS_IOS
-    //no bindings
-#else
-
     void onPlay(cocos2d::CCObject * sender) {
         if (this) if (auto a = getParent()) if (auto scroll = typeinfo_cast<BoomScrollLayer*>(a->getParent())) {
             MLE_LevelSelectExt::LastPlayedPage = scroll->pageNumberForPosition(this->getPosition());
@@ -918,8 +911,6 @@ class $modify(MLE_LevelPageExt, LevelPage) {
         }
         LevelPage::onTheTower(sender);
     }
-
-#endif
 
 };
 
