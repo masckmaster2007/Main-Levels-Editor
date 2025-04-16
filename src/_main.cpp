@@ -8,7 +8,7 @@ using namespace geode::prelude;
 
 #define REMOVE_UI getMod()->getSettingValue<bool>("REMOVE_UI")
 
-//here is a custom shared level format ".level" like ".gmd2", saves sfx and almost all level values.
+//here is a custom shared level format ".level" like ".gmd2", saves sfx and almost all level values
 namespace gmd {
 
     auto LOADED_FILES_CHECKPOINTS = std::map<std::filesystem::path, size_t>{};
