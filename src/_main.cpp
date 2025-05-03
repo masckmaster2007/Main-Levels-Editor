@@ -883,6 +883,8 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
 #include <Geode/modify/LevelPage.hpp>
 class $modify(MLE_LevelPageExt, LevelPage) {
 
+#if defined(__ANDROID__)
+#else
     void updateDynamicPage(GJGameLevel * p0) {
         LevelPage::updateDynamicPage(p0);
         //difficultySprite
@@ -901,6 +903,7 @@ class $modify(MLE_LevelPageExt, LevelPage) {
             )), 1, 179823);
         }
     }
+#endif // !__ANDROID__
 
     void onPlay(cocos2d::CCObject * sender) {
         if (this) if (auto a = getParent()) if (auto scroll = typeinfo_cast<BoomScrollLayer*>(a->getParent())) {
