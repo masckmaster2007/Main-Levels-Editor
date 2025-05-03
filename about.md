@@ -6,7 +6,7 @@ developing v8 rn/
 To replace level:
 - export your level in .level file
 - rename it to `{id}.level` (like 1.level)
-- put it to mod config folder
+- put it to mod config folder (or any other search paths of game)
 - reload game
 
 To add as new one:

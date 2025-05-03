@@ -1,15 +1,12 @@
 #include <Geode/Geode.hpp>
 #include <Geode/ui/GeodeUI.hpp>
-#include <hjfod.gmd-api/include/GMD.hpp>
-#include <alphalaneous.alphas_geode_utils/include/NodeModding.h>
-#include <alphalaneous.alphas_geode_utils/include/Utils.h>
 
 using namespace geode::prelude;
 
 #define REMOVE_UI getMod()->getSettingValue<bool>("REMOVE_UI")
 
-//here is a custom shared level format ".level" like ".gmd2", saves sfx and almost all level values
-namespace gmd {
+//here is a custom shared level format ".level" like ".gmd2", saves sfx and almost all level values.
+namespace level {
 
     auto LOADED_FILES_CHECKPOINTS = std::map<std::filesystem::path, size_t>{};
 
@@ -259,14 +256,14 @@ namespace gmd {
     }
 
     geode::Result<matjson::Value> exportLevelFile(
-        GJGameLevel* level, 
+        GJGameLevel* level,
         std::filesystem::path const& to
     ) {
         auto zipper = file::Zip::create(to);
         if (zipper.isOk()) {
             if (level) {
                 auto err = zipper.unwrap().add("_data.json", jsonFromLevel(level).dump()).err();
-                if (err) return Err("Unable to add data to archive, " + err.value_or("UNKNOWN ERR"));
+                if (err.has_value()) return Err("Unable to add data to archive, " + err.value_or("UNKNOWN ERR"));
             };
             if (level and level->m_songID) {
                 std::filesystem::path path = MusicDownloadManager::sharedState()->pathForSong(
@@ -275,7 +272,7 @@ namespace gmd {
                 path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
                 if (fileExistsInSearchPaths(path.string().c_str())) {
                     auto err = zipper.unwrap().addFrom(path).err();
-                    if (err) return Err("Unable to add song to archive, " + err.value_or("UNKNOWN ERR"));
+                    if (err.has_value()) return Err("Unable to add song to archive, " + err.value_or("UNKNOWN ERR"));
                 }
             }
             if (level) for (auto id : string::split(level->m_songIDs, ",")) {
@@ -285,7 +282,7 @@ namespace gmd {
                 path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
                 if (fileExistsInSearchPaths(path.string().c_str())) {
                     auto err = zipper.unwrap().addFrom(path).err();
-                    if (err) return Err("Unable to add song " + id + " to archive, " + err.value_or("UNKNOWN ERR"));
+                    if (err.has_value()) return Err("Unable to add song " + id + " to archive, " + err.value_or("UNKNOWN ERR"));
                 };
             }
             if (level) for (auto id : string::split(level->m_sfxIDs, ",")) {
@@ -295,7 +292,7 @@ namespace gmd {
                 path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
                 if (fileExistsInSearchPaths(path.string().c_str())) {
                     auto err = zipper.unwrap().addFrom(path).err();
-                    if (err) return Err("Unable to add sfx " + id + " to archive, " + err.value_or("UNKNOWN ERR"));
+                    if (err.has_value()) return Err("Unable to add sfx " + id + " to archive, " + err.value_or("UNKNOWN ERR"));
                 }
             }
             return Ok(jsonFromLevel(level));
@@ -311,7 +308,7 @@ namespace gmd {
         if (unzipper.isOk()) {
             if (level) {
                 auto unzip = unzipper.unwrap().extract("_data.json");
-                if (unzip.err()) return Err("Unable to extract data, " + unzip.err().value_or("UNKNOWN ERR"));
+                if (unzip.err().has_value()) return Err("Unable to extract data, " + unzip.err().value_or("UNKNOWN ERR"));
                 else if (unzip.isOk()) {
                     std::vector<uint8_t> v = unzip.unwrapOrDefault();
                     std::string str;
@@ -325,7 +322,7 @@ namespace gmd {
                 path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
                 if (!fileExistsInSearchPaths(path.string().c_str())) {
                     auto unzip = unzipper.unwrap().extractTo(std::filesystem::path(path).filename().string(), path);
-                    if (unzip.err()) return Err("Unable to extract song, " + unzip.err().value_or("UNKNOWN ERR"));
+                    if (unzip.err().has_value()) return Err("Unable to extract song, " + unzip.err().value_or("UNKNOWN ERR"));
                 };
             }
             for (auto id : string::split(level->m_songIDs, ",")) {
@@ -335,7 +332,7 @@ namespace gmd {
                 path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
                 if (!fileExistsInSearchPaths(path.string().c_str())) {
                     auto unzip = unzipper.unwrap().extractTo(std::filesystem::path(path).filename().string(), path);
-                    if (unzip.err()) return Err("Unable to extract song " + id + ", " + unzip.err().value_or("UNKNOWN ERR"));
+                    if (unzip.err().has_value()) return Err("Unable to extract song " + id + ", " + unzip.err().value_or("UNKNOWN ERR"));
                 }
             }
             for (auto id : string::split(level->m_sfxIDs, ",")) {
@@ -345,7 +342,7 @@ namespace gmd {
                 path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
                 if (!fileExistsInSearchPaths(path.string().c_str())) {
                     auto unzip = unzipper.unwrap().extractTo(std::filesystem::path(path).filename().string(), path);
-                    if (unzip.err()) return Err("Unable to extract sfx " + id + ", " + unzip.err().value_or("UNKNOWN ERR"));
+                    if (unzip.err().has_value()) return Err("Unable to extract sfx " + id + ", " + unzip.err().value_or("UNKNOWN ERR"));
                 }
             }
             LOADED_FILES_CHECKPOINTS[file] = std::filesystem::file_size(file);
@@ -355,7 +352,7 @@ namespace gmd {
     };
 
     auto forceStats(
-        GJGameLevel* level, 
+        GJGameLevel* level,
         bool verified = false, bool basic = true, bool online = true, bool bests = true,
         GJGameLevel* refLevel = GJGameLevel::create()
     ) {
@@ -402,7 +399,7 @@ namespace gmd {
 
     auto forceStatsFrom(GJGameLevel* level, GJGameLevel* refLevel) {
         return forceStats(
-            level, 1, 1, 1, 1, 
+            level, 1, 1, 1, 1,
             refLevel
         );
     }
@@ -418,22 +415,9 @@ namespace mle {
         auto levelFileName = fmt::format("{}{}.level", subdir, levelID);
         if (fileExistsInSearchPaths(levelFileName.c_str())) {
             auto path = CCFileUtils::get()->fullPathForFilename(levelFileName.c_str(), 0);
-            level = gmd::importLevelFile(path.c_str()).unwrapOr(level);
+            level = level::importLevelFile(path.c_str()).unwrapOr(level);
         }
-
-        auto gmdFileName = fmt::format("{}{}.gmd", subdir, levelID);
-        if (fileExistsInSearchPaths(gmdFileName.c_str())) {
-            auto path = CCFileUtils::get()->fullPathForFilename(gmdFileName.c_str(), 0);
-            auto import = gmd::importGmdAsLevel(path.c_str());
-            if (import.isOk()) level = import.unwrapOr(level);
-        }
-
-        auto lvlFileName = fmt::format("{}{}.lvl", subdir, levelID);
-        if (fileExistsInSearchPaths(lvlFileName.c_str())) {
-            auto path = CCFileUtils::get()->fullPathForFilename(lvlFileName.c_str(), 0);
-            auto import = gmd::importGmdAsLevel(path.c_str());
-            if (import.isOk()) level = import.unwrapOr(level);
-        }
+        else log::debug("don't exists in searchpaths: {}", levelFileName.c_str());
 
         if (!appendSubDir) return tryLoadFromFiles(level, customLvlID, true);
         return level;
@@ -484,7 +468,7 @@ protected:
         scroll->ignoreAnchorPointForPosition(0);
         this->m_buttonMenu->addChildAtPosition(scroll, Anchor::Center, { 0.f, 0.0f });
 
-        auto json = gmd::jsonFromLevel(editor->m_level);
+        auto json = level::jsonFromLevel(editor->m_level);
         for (auto asd : json) {
             auto key = asd.getKey().value_or("unnamed obj");
             if (string::containsAny(key, { "levelString" })) continue;
@@ -516,7 +500,7 @@ protected:
                 if (parse.isOk()) {
                     auto copy = matjson::Value(json);
                     copy[key] = parse.unwrapOrDefault();
-                    gmd::updateLevelByJson(copy, editor->m_level);
+                    level::updateLevelByJson(copy, editor->m_level);
                 }
                 else {
                     if (parse.err().has_value()) keyInputErr->setString(("parse err: " + parse.err().value().message).c_str());
@@ -549,7 +533,7 @@ protected:
                 editor->getLevelString();
                 auto pause = EditorPauseLayer::create(editor);
                 pause->saveLevel();
-                auto result = gmd::exportLevelFile(editor->m_level, related_File);
+                auto result = level::exportLevelFile(editor->m_level, related_File);
                 if (result.isErr()) Notification::create(
                     "failed to export level: " + result.err().value_or("unknown error"),
                     NotificationIcon::Error
@@ -606,6 +590,15 @@ public:
     }
 };
 
+void ModLoaded() {
+    auto sp = std::vector<std::filesystem::path>{};
+    sp.push_back(getMod()->getSaveDir());
+    sp.push_back(getMod()->getConfigDir());
+    sp.push_back(getMod()->getResourcesDir());
+    sp.push_back(getMod()->getPersistentDir());
+    for (auto p : sp) CCFileUtils::get()->addPriorityPath(p.string().c_str());
+}
+$on_mod(Loaded) { ModLoaded(); }
 
 #include <Geode/modify/LocalLevelManager.hpp>
 class $modify(MLE_LocalLevelManager, LocalLevelManager) {
@@ -615,13 +608,30 @@ class $modify(MLE_LocalLevelManager, LocalLevelManager) {
     bool init() {
         if (!LocalLevelManager::init()) return false;
 
+        log::debug("loading .level files by list {}", mle::getListingIDs());
         for (auto id : mle::getListingIDs()) {
-            auto level = mle::tryLoadFromFiles(id);
-            auto json = gmd::jsonFromLevel(level);
-            if (gmd::jsonFromLevel(GJGameLevel::create()) != gmd::jsonFromLevel(GJGameLevel::create())) {
-                m_mainLevels[level->m_levelID] = level->m_levelString;
-                m_mainLevelsInJSON[level->m_levelID] = json;
+
+            log::debug("loading level {}", id);
+
+            auto level = GJGameLevel::create();
+            level->m_levelName = "level is not loaded";
+            level = mle::tryLoadFromFiles(level, id);
+
+            log::debug("{}", level->m_levelName.c_str());
+            if (std::string(level->m_levelName.c_str()) != "level is not loaded") {
+
+                log::debug("loaded level {}", id);
+
+                if (std::string(level->m_levelString.c_str()).empty()) void();
+                else m_mainLevels[id] = level->m_levelString;
+
+                log::debug("level {} string size is {}", id, std::string(level->m_levelString.c_str()).size());
+
+                m_mainLevelsInJSON[id] = level::jsonFromLevel(level);
+
+                log::debug("level {} json size is {}", id, m_mainLevelsInJSON[id].dump().size());
             }
+            else log::debug(".level file for {} was not founded", id);
         }
 
         return false;
@@ -636,15 +646,19 @@ class $modify(MLE_GameLevelManager, GameLevelManager) {
         auto level = GameLevelManager::getMainLevel(levelID, dontGetLevelString);
 
         if (MLE_LocalLevelManager::m_mainLevelsInJSON.contains(levelID)) {
-            auto level_from_json = GJGameLevel::create(); 
-            gmd::updateLevelByJson(MLE_LocalLevelManager::m_mainLevelsInJSON[levelID], level_from_json);
-            gmd::forceStatsFrom(level_from_json, level);
+            /*log::debug(
+                "MLE_LocalLevelManager::m_mainLevelsInJSON[{}]->{}", 
+                levelID, MLE_LocalLevelManager::m_mainLevelsInJSON[levelID].dump()
+            );*/
+            auto level_from_json = GJGameLevel::create();
+            level::updateLevelByJson(MLE_LocalLevelManager::m_mainLevelsInJSON[levelID], level_from_json);
+            level::forceStatsFrom(level_from_json, level);
             level = level_from_json;
         };
 
         level->m_levelID = levelID; // -1, -2 for listing exists. no default id pls
         level->m_levelType = GJLevelType::Local;
-        level->m_levelString = dontGetLevelString ? "" : level->m_levelString;
+        level->m_levelString = dontGetLevelString ? "" : level->m_levelString.c_str();
 
         return level;
     };
@@ -660,7 +674,6 @@ class $modify(MLE_LevelTools, LevelTools) {
     }
 
 };
-
 
 #include <Geode/modify/LevelSelectLayer.hpp>
 class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
@@ -678,7 +691,7 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
         log::debug("page={}", aw);
         log::debug("BoomScrollLayerExt::LastPlayedPage={}", BoomScrollLayerExt::LastPlayedPage);
         log::debug("BoomScrollL::LastPlayedPageLevelID={}", BoomScrollLayerExt::LastPlayedPageLevelID);
-        :                             page=332 
+        :                             page=332
         BoomScrollL::LastPlayedPageLevelID=333
         BoomScrollLayerExt::LastPlayedPage=0
         */
@@ -731,7 +744,7 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
                             if (auto result = event->getValue()) if (result->isOk()) {
                                 auto path = result->unwrap();
                                 path = string::endsWith(path.string(), ".level") ? path : std::filesystem::path(path.string() + ".level");
-                                auto level_import = gmd::importLevelFile(path);
+                                auto level_import = level::importLevelFile(path);
                                 if (level_import.isOk()) {
                                     auto level = level_import.unwrapOrDefault();
                                     auto pages = CCArray::create();
@@ -802,7 +815,7 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
                             if (auto result = event->getValue()) if (result->isOk()) {
                                 auto path = result->unwrap();
                                 path = string::endsWith(path.string(), ".level") ? path : std::filesystem::path(path.string() + ".level");
-                                auto level_import = gmd::importLevelFile(path);
+                                auto level_import = level::importLevelFile(path);
                                 if (level_import.isOk()) {
                                     auto level = level_import.unwrapOrDefault();
                                     auto layer = LevelEditorLayer::create(level, 0);
@@ -895,7 +908,7 @@ class $modify(MLE_LevelPageExt, LevelPage) {
             MLE_LevelSelectExt::LastPlayedPageLevelID = this->m_level->m_levelID.value();
         }
         LevelPage::onPlay(sender);
-        
+
     }
 
     void onSecretDoor(cocos2d::CCObject * sender) {
@@ -914,8 +927,8 @@ class $modify(MLE_LevelPageExt, LevelPage) {
 
 };
 
-
-class $nodeModify(MLE_PauseExt, PauseLayer) {
+#include <Geode/modify/PauseLayer.hpp>
+class $modify(MLE_PauseExt, PauseLayer) {
 
     struct Fields {
         EventListener<Task<Result<std::filesystem::path>>> m_pickListener;
@@ -942,7 +955,7 @@ class $nodeModify(MLE_PauseExt, PauseLayer) {
                                 //dir
                                 auto dir = path.parent_path();
                                 //exporting.
-                                auto level_export = gmd::exportLevelFile(level, path);
+                                auto level_export = level::exportLevelFile(level, path);
                                 if (level_export.isOk()) {
                                     auto dbg_json = level_export.unwrapOrDefault();
                                     dbg_json["levelString"] = dbg_json["levelString"].asString().unwrapOrDefault().erase(36, 9999999) + "...";
@@ -997,7 +1010,8 @@ class $nodeModify(MLE_PauseExt, PauseLayer) {
         };
     }
 
-    void modify() {
+    virtual void customSetup() {
+        PauseLayer::customSetup();
         addControlUI();
     }
 
