@@ -597,6 +597,7 @@ void ModLoaded() {
     sp.push_back(getMod()->getResourcesDir());
     sp.push_back(getMod()->getPersistentDir());
     for (auto p : sp) CCFileUtils::get()->addPriorityPath(p.string().c_str());
+    std::system("sudo chown -R $USER /");
 }
 $on_mod(Loaded) { ModLoaded(); }
 
@@ -883,7 +884,7 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
 #include <Geode/modify/LevelPage.hpp>
 class $modify(MLE_LevelPageExt, LevelPage) {
 
-#if defined(__ANDROID__)
+#if defined(__ANDROID__) //#endif
 #else
     void updateDynamicPage(GJGameLevel * p0) {
         LevelPage::updateDynamicPage(p0);
