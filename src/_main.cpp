@@ -1,6 +1,8 @@
 #include <Geode/Geode.hpp>
 #include <Geode/ui/GeodeUI.hpp>
 
+#include "zip_file.hpp"
+
 using namespace geode::prelude;
 
 #define REMOVE_UI getMod()->getSettingValue<bool>("REMOVE_UI")
@@ -11,6 +13,7 @@ namespace level {
     auto LOADED_FILES_CHECKPOINTS = std::map<std::filesystem::path, size_t>{};
 
     matjson::Value jsonFromLevel(GJGameLevel* level) {
+        level = level ? level : GJGameLevel::create();
         matjson::Value json;
         json["levelID"] = level->m_levelID.value();
         json["levelName"] = level->m_levelName.c_str();
@@ -136,219 +139,253 @@ namespace level {
 
     void updateLevelByJson(const matjson::Value& json, GJGameLevel* level) {
         //log::debug("{} update by json: {}", level, json.dump());
-        level->m_levelID = json["levelID"].asInt().unwrapOrDefault();
-        level->m_levelName = json["levelName"].asString().unwrapOrDefault().c_str();
-        level->m_levelDesc = json["levelDesc"].asString().unwrapOrDefault().c_str();
-        level->m_levelString = json["levelString"].asString().unwrapOrDefault().c_str();
-        level->m_creatorName = json["creatorName"].asString().unwrapOrDefault().c_str();
-        level->m_recordString = json["recordString"].asString().unwrapOrDefault().c_str();
-        level->m_uploadDate = json["uploadDate"].asString().unwrapOrDefault().c_str();
-        level->m_updateDate = json["updateDate"].asString().unwrapOrDefault().c_str();
-        level->m_unkString1 = json["unkString1"].asString().unwrapOrDefault().c_str();
-        level->m_unkString2 = json["unkString2"].asString().unwrapOrDefault().c_str();
+#define asInt(member, ...) level->m_##member = __VA_ARGS__(json[#member""].asInt().unwrapOr(static_cast<int>(level->m_##member)));
+#define asSeed(member) level->m_##member = json[#member""].as<int>().unwrapOr(level->m_##member.value());
+#define asString(member) level->m_##member = json[#member""].asString().unwrapOr(level->m_##member.data()).data();
+#define asDouble(member) level->m_##member = json[#member""].asDouble().unwrapOr(level->m_##member);
+#define asBool(member) level->m_##member = json[#member""].asBool().unwrapOr(level->m_##member);
+
+        asSeed(levelID);
+        asString(levelName);// = json["levelName"].().().c_str();
+        asString(levelDesc);// = json["levelDesc"].asString().unwrapOr().c_str();
+        asString(levelString);// = json["levelString"].asString().unwrapOr().c_str();
+        asString(creatorName);// = json["creatorName"].asString().unwrapOr().c_str();
+        asString(recordString);// = json["recordString"].asString().unwrapOr().c_str();
+        asString(uploadDate);// = json["uploadDate"].asString().unwrapOr().c_str();
+        asString(updateDate);// = json["updateDate"].asString().unwrapOr().c_str();
+        asString(unkString1);// = json["unkString1"].asString().unwrapOr().c_str();
+        asString(unkString2);// = json["unkString2"].asString().unwrapOr().c_str();
         { // CCPoint m_unkPoint
             matjson::Value pt = json["unkPoint"];
-            level->m_unkPoint.x = pt["x"].asDouble().unwrapOrDefault();
-            level->m_unkPoint.y = pt["y"].asDouble().unwrapOrDefault();
+            asDouble(unkPoint.x);// = pt["x"].asDouble().unwrapOr();
+            asDouble(unkPoint.y);// = pt["y"].asDouble().unwrapOr();
         }
-        level->m_userID = json["userID"].asInt().unwrapOrDefault();
-        level->m_accountID = json["accountID"].asInt().unwrapOrDefault();
-        level->m_difficulty = static_cast<GJDifficulty>(json["difficulty"].asInt().unwrapOrDefault());
-        level->m_audioTrack = json["audioTrack"].asInt().unwrapOrDefault();
-        level->m_songID = json["songID"].asInt().unwrapOrDefault();
-        level->m_levelRev = json["levelRev"].asInt().unwrapOrDefault();
-        level->m_unlisted = json["unlisted"].asBool().unwrapOrDefault();
-        level->m_friendsOnly = json["friendsOnly"].asBool().unwrapOrDefault();
-        level->m_objectCount = json["objectCount"].asInt().unwrapOrDefault();
-        level->m_levelIndex = json["levelIndex"].asInt().unwrapOrDefault();
-        level->m_ratings = json["ratings"].asInt().unwrapOrDefault();
-        level->m_ratingsSum = json["ratingsSum"].asInt().unwrapOrDefault();
-        level->m_downloads = json["downloads"].asInt().unwrapOrDefault();
-        level->m_isEditable = json["isEditable"].asBool().unwrapOrDefault();
-        level->m_gauntletLevel = json["gauntletLevel"].asBool().unwrapOrDefault();
-        level->m_gauntletLevel2 = json["gauntletLevel2"].asBool().unwrapOrDefault();
-        level->m_workingTime = json["workingTime"].asInt().unwrapOrDefault();
-        level->m_workingTime2 = json["workingTime2"].asInt().unwrapOrDefault();
-        level->m_lowDetailMode = json["lowDetailMode"].asBool().unwrapOrDefault();
-        level->m_lowDetailModeToggled = json["lowDetailModeToggled"].asBool().unwrapOrDefault();
-        level->m_disableShakeToggled = json["disableShakeToggled"].asBool().unwrapOrDefault();
-        level->m_selected = json["selected"].asBool().unwrapOrDefault();
-        level->m_localOrSaved = json["localOrSaved"].asBool().unwrapOrDefault();
-        level->m_disableShake = json["disableShake"].asBool().unwrapOrDefault();
-        level->m_isVerified = json["isVerified"].asInt().unwrapOrDefault();
-        level->m_isVerifiedRaw = json["isVerifiedRaw"].asBool().unwrapOrDefault();
-        level->m_isUploaded = json["isUploaded"].asBool().unwrapOrDefault();
-        level->m_hasBeenModified = json["hasBeenModified"].asBool().unwrapOrDefault();
-        level->m_levelVersion = json["levelVersion"].asInt().unwrapOrDefault();
-        level->m_gameVersion = json["gameVersion"].asInt().unwrapOrDefault();
-        level->m_attempts = json["attempts"].asInt().unwrapOrDefault();
-        level->m_jumps = json["jumps"].asInt().unwrapOrDefault();
-        level->m_clicks = json["clicks"].asInt().unwrapOrDefault();
-        level->m_attemptTime = json["attemptTime"].asInt().unwrapOrDefault();
-        level->m_chk = json["chk"].asInt().unwrapOrDefault();
-        level->m_isChkValid = json["isChkValid"].asBool().unwrapOrDefault();
-        level->m_isCompletionLegitimate = json["isCompletionLegitimate"].asBool().unwrapOrDefault();
-        level->m_normalPercent = json["normalPercent"].asInt().unwrapOrDefault();
-        level->m_orbCompletion = json["orbCompletion"].asInt().unwrapOrDefault();
-        level->m_newNormalPercent2 = json["newNormalPercent2"].asInt().unwrapOrDefault();
-        level->m_practicePercent = json["practicePercent"].asInt().unwrapOrDefault();
-        level->m_likes = json["likes"].asInt().unwrapOrDefault();
-        level->m_dislikes = json["dislikes"].asInt().unwrapOrDefault();
-        level->m_levelLength = json["levelLength"].asInt().unwrapOrDefault();
-        level->m_featured = json["featured"].asInt().unwrapOrDefault();
-        level->m_isEpic = json["isEpic"].asInt().unwrapOrDefault();
-        level->m_levelFavorited = json["levelFavorited"].asBool().unwrapOrDefault();
-        level->m_levelFolder = json["levelFolder"].asInt().unwrapOrDefault();
-        level->m_dailyID = json["dailyID"].asInt().unwrapOrDefault();
-        level->m_demon = json["demon"].asInt().unwrapOrDefault();
-        level->m_demonDifficulty = json["demonDifficulty"].asInt().unwrapOrDefault();
-        level->m_stars = json["stars"].asInt().unwrapOrDefault();
-        level->m_autoLevel = json["autoLevel"].asBool().unwrapOrDefault();
-        level->m_coins = json["coins"].asInt().unwrapOrDefault();
-        level->m_coinsVerified = json["coinsVerified"].asInt().unwrapOrDefault();
-        level->m_password = json["password"].asInt().unwrapOrDefault();
-        level->m_originalLevel = json["originalLevel"].asInt().unwrapOrDefault();
-        level->m_twoPlayerMode = json["twoPlayerMode"].asBool().unwrapOrDefault();
-        level->m_failedPasswordAttempts = json["failedPasswordAttempts"].asInt().unwrapOrDefault();
-        level->m_firstCoinVerified = json["firstCoinVerified"].asInt().unwrapOrDefault();
-        level->m_secondCoinVerified = json["secondCoinVerified"].asInt().unwrapOrDefault();
-        level->m_thirdCoinVerified = json["thirdCoinVerified"].asInt().unwrapOrDefault();
-        level->m_starsRequested = json["starsRequested"].asInt().unwrapOrDefault();
-        level->m_showedSongWarning = json["showedSongWarning"].asBool().unwrapOrDefault();
-        level->m_starRatings = json["starRatings"].asInt().unwrapOrDefault();
-        level->m_starRatingsSum = json["starRatingsSum"].asInt().unwrapOrDefault();
-        level->m_maxStarRatings = json["maxStarRatings"].asInt().unwrapOrDefault();
-        level->m_minStarRatings = json["minStarRatings"].asInt().unwrapOrDefault();
-        level->m_demonVotes = json["demonVotes"].asInt().unwrapOrDefault();
-        level->m_rateStars = json["rateStars"].asInt().unwrapOrDefault();
-        level->m_rateFeature = json["rateFeature"].asInt().unwrapOrDefault();
-        level->m_rateUser = json["rateUser"].asString().unwrapOrDefault().c_str();
-        level->m_dontSave = json["dontSave"].asBool().unwrapOrDefault();
-        level->m_levelNotDownloaded = json["levelNotDownloaded"].asBool().unwrapOrDefault();
-        level->m_requiredCoins = json["requiredCoins"].asInt().unwrapOrDefault();
-        level->m_isUnlocked = json["isUnlocked"].asBool().unwrapOrDefault();
+        asSeed(userID);// = json["userID"].asInt().unwrapOr();
+        asSeed(accountID);// = json["accountID"].asInt().unwrapOr();
+        asInt(difficulty, static_cast<GJDifficulty>);// = (json["difficulty"].asInt().unwrapOr());
+        asInt(audioTrack);// = json["audioTrack"].asInt().unwrapOr();
+        asInt(songID);// = json["songID"].asInt().unwrapOr();
+        asInt(levelRev);// = json["levelRev"].asInt().unwrapOr();
+        asBool(unlisted);// = json["unlisted"].asBool().unwrapOr();
+        asBool(friendsOnly);// = json["friendsOnly"].asBool().unwrapOr();
+        asSeed(objectCount);// = json["objectCount"].asInt().unwrapOr();
+        asInt(levelIndex);// = json["levelIndex"].asInt().unwrapOr();
+        asInt(ratings);// = json["ratings"].asInt().unwrapOr();
+        asInt(ratingsSum);// = json["ratingsSum"].asInt().unwrapOr();
+        asInt(downloads);// = json["downloads"].asInt().unwrapOr();
+        asBool(isEditable);// = json["isEditable"].asBool().unwrapOr();
+        asBool(gauntletLevel);// = json["gauntletLevel"].asBool().unwrapOr();
+        asBool(gauntletLevel2);// = json["gauntletLevel2"].asBool().unwrapOr();
+        asInt(workingTime);// = json["workingTime"].asInt().unwrapOr();
+        asInt(workingTime2);// = json["workingTime2"].asInt().unwrapOr();
+        asBool(lowDetailMode);// = json["lowDetailMode"].asBool().unwrapOr();
+        asBool(lowDetailModeToggled);// = json["lowDetailModeToggled"].asBool().unwrapOr();
+        asBool(disableShakeToggled);// = json["disableShakeToggled"].asBool().unwrapOr();
+        asBool(selected);// = json["selected"].asBool().unwrapOr();
+        asBool(localOrSaved);// = json["localOrSaved"].asBool().unwrapOr();
+        asBool(disableShake);// = json["disableShake"].asBool().unwrapOr();
+        asSeed(isVerified);// = json["isVerified"].asInt().unwrapOr();
+        asBool(isVerifiedRaw);// = json["isVerifiedRaw"].asBool().unwrapOr();
+        asBool(isUploaded);// = json["isUploaded"].asBool().unwrapOr();
+        asBool(hasBeenModified);// = json["hasBeenModified"].asBool().unwrapOr();
+        asInt(levelVersion);// = json["levelVersion"].asInt().unwrapOr();
+        asInt(gameVersion);// = json["gameVersion"].asInt().unwrapOr();
+        asSeed(attempts);// = json["attempts"].asInt().unwrapOr();
+        asSeed(jumps);// = json["jumps"].asInt().unwrapOr();
+        asSeed(clicks);// = json["clicks"].asInt().unwrapOr();
+        asSeed(attemptTime);// = json["attemptTime"].asInt().unwrapOr();
+        asInt(chk);// = json["chk"].asInt().unwrapOr();
+        asBool(isChkValid);// = json["isChkValid"].asBool().unwrapOr();
+        asBool(isCompletionLegitimate);// = json["isCompletionLegitimate"].asBool().unwrapOr();
+        asSeed(normalPercent);// = json["normalPercent"].asInt().unwrapOr();
+        asSeed(orbCompletion);// = json["orbCompletion"].asInt().unwrapOr();
+        asSeed(newNormalPercent2);// = json["newNormalPercent2"].asInt().unwrapOr();
+        asInt(practicePercent);// = json["practicePercent"].asInt().unwrapOr();
+        asInt(likes);// = json["likes"].asInt().unwrapOr();
+        asInt(dislikes);// = json["dislikes"].asInt().unwrapOr();
+        asInt(levelLength);// = json["levelLength"].asInt().unwrapOr();
+        asInt(featured);// = json["featured"].asInt().unwrapOr();
+        asInt(isEpic);// = json["isEpic"].asInt().unwrapOr();
+        asBool(levelFavorited);// = json["levelFavorited"].asBool().unwrapOr();
+        asInt(levelFolder);// = json["levelFolder"].asInt().unwrapOr();
+        asSeed(dailyID);// = json["dailyID"].asInt().unwrapOr();
+        asSeed(demon);// = json["demon"].asInt().unwrapOr();
+        asInt(demonDifficulty);// = json["demonDifficulty"].asInt().unwrapOr();
+        asSeed(stars);// = json["stars"].asInt().unwrapOr();
+        asBool(autoLevel);// = json["autoLevel"].asBool().unwrapOr();
+        asInt(coins);// = json["coins"].asInt().unwrapOr();
+        asSeed(coinsVerified);// = json["coinsVerified"].asInt().unwrapOr();
+        asSeed(password);// = json["password"].asInt().unwrapOr();
+        asSeed(originalLevel);// = json["originalLevel"].asInt().unwrapOr();
+        asBool(twoPlayerMode);// = json["twoPlayerMode"].asBool().unwrapOr();
+        asInt(failedPasswordAttempts);// = json["failedPasswordAttempts"].asInt().unwrapOr();
+        asSeed(firstCoinVerified);// = json["firstCoinVerified"].asInt().unwrapOr();
+        asSeed(secondCoinVerified);// = json["secondCoinVerified"].asInt().unwrapOr();
+        asSeed(thirdCoinVerified);// = json["thirdCoinVerified"].asInt().unwrapOr();
+        asInt(starsRequested);// = json["starsRequested"].asInt().unwrapOr();
+        asBool(showedSongWarning);// = json["showedSongWarning"].asBool().unwrapOr();
+        asInt(starRatings);// = json["starRatings"].asInt().unwrapOr();
+        asInt(starRatingsSum);// = json["starRatingsSum"].asInt().unwrapOr();
+        asInt(maxStarRatings);// = json["maxStarRatings"].asInt().unwrapOr();
+        asInt(minStarRatings);// = json["minStarRatings"].asInt().unwrapOr();
+        asInt(demonVotes);// = json["demonVotes"].asInt().unwrapOr();
+        asInt(rateStars);// = json["rateStars"].asInt().unwrapOr();
+        asInt(rateFeature);// = json["rateFeature"].asInt().unwrapOr();
+        asString(rateUser);// = json["rateUser"].asString().unwrapOr().c_str();
+        asBool(dontSave);// = json["dontSave"].asBool().unwrapOr();
+        asBool(levelNotDownloaded);// = json["levelNotDownloaded"].asBool().unwrapOr();
+        asInt(requiredCoins);// = json["requiredCoins"].asInt().unwrapOr();
+        asBool(isUnlocked);// = json["isUnlocked"].asBool().unwrapOr();
         { // CCPoint m_lastCameraPos
             matjson::Value pt = json["lastCameraPos"];
-            level->m_lastCameraPos.x = pt["x"].asDouble().unwrapOrDefault();
-            level->m_lastCameraPos.y = pt["y"].asDouble().unwrapOrDefault();
+            asDouble(lastCameraPos.x);// = pt["x"].asDouble().unwrapOr();
+            asDouble(lastCameraPos.y);// = pt["y"].asDouble().unwrapOr();
         }
-        level->m_fastEditorZoom = json["fastEditorZoom"].asDouble().unwrapOrDefault();
-        level->m_lastBuildTab = json["lastBuildTab"].asInt().unwrapOrDefault();
-        level->m_lastBuildPage = json["lastBuildPage"].asInt().unwrapOrDefault();
-        level->m_lastBuildGroupID = json["lastBuildGroupID"].asInt().unwrapOrDefault();
-        level->m_levelType = static_cast<GJLevelType>(json["levelType"].asInt().unwrapOrDefault());
-        level->m_M_ID = json["M_ID"].asInt().unwrapOrDefault();
-        level->m_tempName = json["tempName"].asString().unwrapOrDefault().c_str();
-        level->m_capacityString = json["capacityString"].asString().unwrapOrDefault().c_str();
-        level->m_highObjectsEnabled = json["highObjectsEnabled"].asBool().unwrapOrDefault();
-        level->m_unlimitedObjectsEnabled = json["unlimitedObjectsEnabled"].asBool().unwrapOrDefault();
-        level->m_personalBests = json["personalBests"].asString().unwrapOrDefault().c_str();
-        level->m_timestamp = json["timestamp"].asInt().unwrapOrDefault();
-        level->m_listPosition = json["listPosition"].asInt().unwrapOrDefault();
-        level->m_songIDs = json["songIDs"].asString().unwrapOrDefault().c_str();
-        level->m_sfxIDs = json["sfxIDs"].asString().unwrapOrDefault().c_str();
-        level->m_54 = json["field_54"].asInt().unwrapOrDefault();
-        level->m_bestTime = json["bestTime"].asInt().unwrapOrDefault();
-        level->m_bestPoints = json["bestPoints"].asInt().unwrapOrDefault();
-        level->m_k111 = json["k111"].asInt().unwrapOrDefault();
-        level->m_unkString3 = json["unkString3"].asString().unwrapOrDefault().c_str();
-        level->m_unkString4 = json["unkString4"].asString().unwrapOrDefault().c_str();
+        asDouble(fastEditorZoom);// = json["fastEditorZoom"].asDouble().unwrapOr();
+        asInt(lastBuildTab);// = json["lastBuildTab"].asInt().unwrapOr();
+        asInt(lastBuildPage);// = json["lastBuildPage"].asInt().unwrapOr();
+        asInt(lastBuildGroupID);// = json["lastBuildGroupID"].asInt().unwrapOr();
+        asInt(levelType, static_cast<GJLevelType>);// = (json["levelType"].asInt().unwrapOr());
+        asInt(M_ID);// = json["M_ID"].asInt().unwrapOr();
+        asString(tempName);// = json["tempName"].asString().unwrapOr().c_str();
+        asString(capacityString);// = json["capacityString"].asString().unwrapOr().c_str();
+        asBool(highObjectsEnabled);// = json["highObjectsEnabled"].asBool().unwrapOr();
+        asBool(unlimitedObjectsEnabled);// = json["unlimitedObjectsEnabled"].asBool().unwrapOr();
+        asString(personalBests);// = json["personalBests"].asString().unwrapOr().c_str();
+        asInt(timestamp);// = json["timestamp"].asInt().unwrapOr();
+        asInt(listPosition);// = json["listPosition"].asInt().unwrapOr();
+        asString(songIDs);// = json["songIDs"].asString().unwrapOr().c_str();
+        asString(sfxIDs);// = json["sfxIDs"].asString().unwrapOr().c_str();
+        //asInt(54);// = json["field_54"].asInt().unwrapOr();
+        asInt(bestTime);// = json["bestTime"].asInt().unwrapOr();
+        asInt(bestPoints);// = json["bestPoints"].asInt().unwrapOr();
+        asInt(k111);// = json["k111"].asInt().unwrapOr();
+        asString(unkString3);// = json["unkString3"].asString().unwrapOr().c_str();
+        asString(unkString4);// = json["unkString4"].asString().unwrapOr().c_str();
+
+#undef asInt//(member, ...) level->m_##member = __VA_ARGS__(json[#member""].asInt().unwrapOr(static_cast<int>(level->m_##member)));
+#undef asSeed//(member) level->m_##member = json[#member""].as<int>().unwrapOr(level->m_##member.value());
+#undef asString//(member) level->m_##member = json[#member""].asString().unwrapOr(level->m_##member.data()).data();
+#undef asDouble//(member) level->m_##member = json[#member""].asDouble().unwrapOr(level->m_##member);
+#undef asBool//(member) level->m_##member = json[#member""].asBool().unwrapOr(level->m_##member);
     }
 
     geode::Result<matjson::Value> exportLevelFile(
         GJGameLevel* level,
         std::filesystem::path const& to
     ) {
-        auto zipper = file::Zip::create(to);
-        if (zipper.isOk()) {
-            if (level) {
-                auto err = zipper.unwrap().add("_data.json", jsonFromLevel(level).dump()).err();
-                if (err.has_value()) return Err("Unable to add data to archive, " + err.value_or("UNKNOWN ERR"));
-            };
-            if (level and level->m_songID) {
-                std::filesystem::path path = MusicDownloadManager::sharedState()->pathForSong(
-                    level->m_songID
-                ).c_str();
-                path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
-                if (fileExistsInSearchPaths(path.string().c_str())) {
-                    auto err = zipper.unwrap().addFrom(path).err();
-                    if (err.has_value()) return Err("Unable to add song to archive, " + err.value_or("UNKNOWN ERR"));
-                }
+        if (!level) return Err("level ptr is null.");
+        if (!typeinfo_cast<GJGameLevel*>(level)) return Err("level ptr is not GJGameLevel typed in RTTI.");
+
+        miniz_cpp::zip_file file;
+
+        auto json = jsonFromLevel(level);
+        file.writestr("_data.json", json.dump());
+
+        //primary song id isnt 0
+        if (level->m_songID) {
+            //path
+            std::filesystem::path path = MusicDownloadManager::sharedState()->pathForSong(
+                level->m_songID
+            ).c_str();
+            path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
+            //add if exists
+            if (fileExistsInSearchPaths(path.string().c_str())) {
+                file.write(path.string(), std::filesystem::path(path).filename().string());
             }
-            if (level) for (auto id : string::split(level->m_songIDs, ",")) {
-                std::filesystem::path path = MusicDownloadManager::sharedState()->pathForSong(
-                    utils::numFromString<int>(id).unwrapOrDefault()
-                ).c_str();
-                path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
-                if (fileExistsInSearchPaths(path.string().c_str())) {
-                    auto err = zipper.unwrap().addFrom(path).err();
-                    if (err.has_value()) return Err("Unable to add song " + id + " to archive, " + err.value_or("UNKNOWN ERR"));
-                };
-            }
-            if (level) for (auto id : string::split(level->m_sfxIDs, ",")) {
-                std::filesystem::path path = MusicDownloadManager::sharedState()->pathForSFX(
-                    utils::numFromString<int>(id).unwrapOrDefault()
-                ).c_str();
-                path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
-                if (fileExistsInSearchPaths(path.string().c_str())) {
-                    auto err = zipper.unwrap().addFrom(path).err();
-                    if (err.has_value()) return Err("Unable to add sfx " + id + " to archive, " + err.value_or("UNKNOWN ERR"));
-                }
-            }
-            return Ok(jsonFromLevel(level));
         }
-        else return Err("Unable to create zipper for file, " + zipper.err().value_or("UNKNOWN ERR"));
+
+        //fe the ids from list
+        for (auto id : string::split(level->m_songIDs, ",")) {
+            //path
+            std::filesystem::path path = MusicDownloadManager::sharedState()->pathForSong(
+                utils::numFromString<int>(id).unwrapOrDefault()
+            ).c_str();
+            path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
+            //add if exists
+            if (fileExistsInSearchPaths(path.string().c_str())) {
+                file.write(path.string(), std::filesystem::path(path).filename().string());
+            };
+        }
+
+        //fe the ids from list
+        for (auto id : string::split(level->m_sfxIDs, ",")) {
+            //path
+            std::filesystem::path path = MusicDownloadManager::sharedState()->pathForSFX(
+                utils::numFromString<int>(id).unwrapOrDefault()
+            ).c_str();
+            path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
+            //add if exists
+            if (fileExistsInSearchPaths(path.string().c_str())) {
+                file.write(path.string(), std::filesystem::path(path).filename().string());
+            }
+        }
+
+        file.save(to.string());
+
+        return Ok(json);
     };
 
     geode::Result<GJGameLevel*> importLevelFile(
-        std::filesystem::path const& file,
+        std::filesystem::path const& from,
         GJGameLevel* level = GJGameLevel::create()
     ) {
-        auto unzipper = file::Unzip::create(file);
-        if (unzipper.isOk()) {
-            if (level) {
-                auto unzip = unzipper.unwrap().extract("_data.json");
-                if (unzip.err().has_value()) return Err("Unable to extract data, " + unzip.err().value_or("UNKNOWN ERR"));
-                else if (unzip.isOk()) {
-                    std::vector<uint8_t> v = unzip.unwrapOrDefault();
-                    std::string str;
-                    str.assign(v.begin(), v.end());
-                    updateLevelByJson(matjson::parse(str).unwrapOrDefault(), level);
-                }
+        if (!level) return Err("level ptr is null.");
+        if (!typeinfo_cast<GJGameLevel*>(level)) return Err("level ptr is not GJGameLevel typed in RTTI.");
+
+        miniz_cpp::zip_file file(from.string());
+
+        auto tempFile = (dirs::getTempDir() / GEODE_MOD_ID"-unzip.temp");
+
+        GEODE_UNWRAP_INTO(auto data, matjson::parse(file.read("_data.json")));
+        updateLevelByJson(data, level);
+
+        log::debug("data from zip: {}", data.dump());
+
+        //primary song id isnt 0
+        if (level->m_songID) {
+            //path
+            std::filesystem::path path = MusicDownloadManager::sharedState()->pathForSong(level->m_songID).c_str();
+            path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
+            if (!fileExistsInSearchPaths(path.string().c_str())) {
+                auto atzip = std::filesystem::path(path).filename().string();
+                auto str = file.read(file.getinfo(atzip));
+                std::vector<uint8_t> bin(str.begin(), str.end());
+                GEODE_UNWRAP(file::writeBinary(path, bin));
             };
-            if (LOADED_FILES_CHECKPOINTS[file] == std::filesystem::file_size(file)) return Ok(level);
-            if (level and level->m_songID) {
-                std::filesystem::path path = MusicDownloadManager::sharedState()->pathForSong(level->m_songID).c_str();
-                path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
-                if (!fileExistsInSearchPaths(path.string().c_str())) {
-                    auto unzip = unzipper.unwrap().extractTo(std::filesystem::path(path).filename().string(), path);
-                    if (unzip.err().has_value()) return Err("Unable to extract song, " + unzip.err().value_or("UNKNOWN ERR"));
-                };
-            }
-            for (auto id : string::split(level->m_songIDs, ",")) {
-                std::filesystem::path path = MusicDownloadManager::sharedState()->pathForSong(
-                    utils::numFromString<int>(id).unwrapOrDefault()
-                ).c_str();
-                path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
-                if (!fileExistsInSearchPaths(path.string().c_str())) {
-                    auto unzip = unzipper.unwrap().extractTo(std::filesystem::path(path).filename().string(), path);
-                    if (unzip.err().has_value()) return Err("Unable to extract song " + id + ", " + unzip.err().value_or("UNKNOWN ERR"));
-                }
-            }
-            for (auto id : string::split(level->m_sfxIDs, ",")) {
-                std::filesystem::path path = MusicDownloadManager::sharedState()->pathForSFX(
-                    utils::numFromString<int>(id).unwrapOrDefault()
-                ).c_str();
-                path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
-                if (!fileExistsInSearchPaths(path.string().c_str())) {
-                    auto unzip = unzipper.unwrap().extractTo(std::filesystem::path(path).filename().string(), path);
-                    if (unzip.err().has_value()) return Err("Unable to extract sfx " + id + ", " + unzip.err().value_or("UNKNOWN ERR"));
-                }
-            }
-            LOADED_FILES_CHECKPOINTS[file] = std::filesystem::file_size(file);
-            return Ok(level);
         }
-        else return Err("Unable to create unzipper for file, " + unzipper.err().value_or("UNKNOWN ERR"));
+
+        for (auto id : string::split(level->m_songIDs, ",")) {
+            //path
+            std::filesystem::path path = MusicDownloadManager::sharedState()->pathForSong(
+                utils::numFromString<int>(id).unwrapOrDefault()
+            ).c_str();
+            path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
+            //add if exists
+            if (!fileExistsInSearchPaths(path.string().c_str())) {
+                auto atzip = std::filesystem::path(path).filename().string();
+                auto str = file.read(file.getinfo(atzip));
+                std::vector<uint8_t> bin(str.begin(), str.end());
+                GEODE_UNWRAP(file::writeBinary(path, bin));
+            }
+        }
+
+        for (auto id : string::split(level->m_sfxIDs, ",")) {
+            //path
+            std::filesystem::path path = MusicDownloadManager::sharedState()->pathForSFX(
+                utils::numFromString<int>(id).unwrapOrDefault()
+            ).c_str();
+            path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
+            //add if exists
+            if (!fileExistsInSearchPaths(path.string().c_str())) {
+                auto atzip = std::filesystem::path(path).filename().string();
+                auto str = file.read(file.getinfo(atzip));
+                std::vector<uint8_t> bin(str.begin(), str.end());
+                GEODE_UNWRAP(file::writeBinary(path, bin));
+            }
+        }
+
+        return Ok(level);
     };
 
     auto forceStats(
@@ -597,7 +634,6 @@ void ModLoaded() {
     sp.push_back(getMod()->getResourcesDir());
     sp.push_back(getMod()->getPersistentDir());
     for (auto p : sp) CCFileUtils::get()->addPriorityPath(p.string().c_str());
-    std::system("sudo chown -R $USER /");
 }
 $on_mod(Loaded) { ModLoaded(); }
 
@@ -651,10 +687,21 @@ class $modify(MLE_GameLevelManager, GameLevelManager) {
                 "MLE_LocalLevelManager::m_mainLevelsInJSON[{}]->{}", 
                 levelID, MLE_LocalLevelManager::m_mainLevelsInJSON[levelID].dump()
             );*/
-            auto level_from_json = GJGameLevel::create();
-            level::updateLevelByJson(MLE_LocalLevelManager::m_mainLevelsInJSON[levelID], level_from_json);
-            level::forceStatsFrom(level_from_json, level);
-            level = level_from_json;
+            auto loadedLevel = GJGameLevel::create();
+            level::updateLevelByJson(MLE_LocalLevelManager::m_mainLevelsInJSON[levelID], loadedLevel);
+            //xd
+            level->m_levelString = loadedLevel->m_levelString.c_str();
+            level->m_stars = (loadedLevel->m_stars.value());
+            level->m_requiredCoins = loadedLevel->m_requiredCoins;
+            level->m_levelName = loadedLevel->m_levelName;
+            level->m_audioTrack = loadedLevel->m_audioTrack;
+            level->m_demon = (loadedLevel->m_demon.value());
+            level->m_twoPlayerMode = loadedLevel->m_twoPlayerMode;
+            level->m_difficulty = loadedLevel->m_difficulty;
+            level->m_capacityString = loadedLevel->m_capacityString;
+            level->m_levelID = (levelID);
+            level->m_timestamp = loadedLevel->m_timestamp;
+            level->m_levelLength = loadedLevel->m_levelLength;
         };
 
         level->m_levelID = levelID; // -1, -2 for listing exists. no default id pls
@@ -686,6 +733,13 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
     struct Fields {
         EventListener<Task<Result<std::filesystem::path>>> m_pickListener;
     };
+
+    virtual void keyDown(cocos2d::enumKeyCodes p0) {
+        LevelSelectLayer::keyDown(p0);
+        if (this) if (auto a = getParent()) if (auto scroll = typeinfo_cast<BoomScrollLayer*>(a->getParent())) {
+            MLE_LevelSelectExt::ForceNextTo = scroll->pageNumberForPosition(this->getPosition());
+        }
+    }
 
     bool init(int page) {
         /*
@@ -1000,6 +1054,7 @@ class $modify(MLE_PauseExt, PauseLayer) {
                                         level_export.err().value_or("UNK ERROR")
                                         , NotificationIcon::Error
                                     )->show();
+                                    log::error("{}", level_export.err());
                                 }
                             }
                             else FLAlertLayer::create("Failed to get picked path", result->unwrapErr(), "OK")->show();
