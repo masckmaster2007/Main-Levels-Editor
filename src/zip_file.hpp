@@ -254,14 +254,21 @@
 #define MINIZ_HAS_64BIT_REGISTERS 1
 #endif
 
-#if defined(MINIZ_HAS_64BIT_REGISTERS)
-#define MZ_COUNT_T  unsigned long
+#if defined(_WIN32) || defined(_WIN64)
+    //windows — at minizip all as uint64_t
+    #define MZ_COUNT_T  std::uint64_t
+    #define MZ_RET_T    std::uint64_t
 #else
-#define MZ_COUNT_T  unsigned int
+    //unix-like (android, macos, ios): lp64 / ilp32
+    #if defined(__LP64__) || defined(_LP64)
+        #define MZ_COUNT_T  unsigned long
+        #define MZ_RET_T    unsigned long
+    #else
+        #define MZ_COUNT_T  unsigned int
+        #define MZ_RET_T    unsigned int
+    #endif
 #endif
-
-#define MZ_RET_T      MZ_COUNT_T
-#define MZ_OFS_T      unsigned long long
+#define MZ_OFS_T std::uint64_t
 
 #ifdef __APPLE__
 #define ftello64 ftello
@@ -5113,25 +5120,23 @@ tm safe_localtime(const time_t &t)
 }
 
 static MZ_RET_T write_callback(
-    void *opaque, 
-    MZ_OFS_T file_ofs, 
-    const void *pBuf, 
-    MZ_COUNT_T n
+    void* opaque,
+    MZ_OFS_T file_ofs,
+    const void* buf,
+    MZ_COUNT_T size
 ) {
-    auto buffer = static_cast<std::vector<char> *>(opaque);
-    
-    if(file_ofs + n > buffer->size())
-    {
-        auto new_size = static_cast<std::vector<char>::size_type>(file_ofs + n);
-        buffer->resize(new_size);
+    auto buffer = static_cast<std::vector<char>*>(opaque);
+
+    if (file_ofs + size > buffer->size()) {
+        buffer->resize(static_cast<std::vector<char>::size_type>(file_ofs + size));
     }
 
-    for(std::size_t i = 0; i < n; i++)
-    {
-        (*buffer)[static_cast<std::size_t>(file_ofs + i)] = (static_cast<const char *>(pBuf))[i];
+    for (std::size_t i = 0; i < size; ++i) {
+        (*buffer)[static_cast<std::size_t>(file_ofs + i)] =
+            static_cast<const char*>(buf)[i];
     }
 
-    return n;
+    return static_cast<MZ_RET_T>(size);
 }
 
 } // namespace detail
