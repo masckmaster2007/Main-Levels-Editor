@@ -254,6 +254,15 @@
 #define MINIZ_HAS_64BIT_REGISTERS 1
 #endif
 
+#if defined(MINIZ_HAS_64BIT_REGISTERS)
+#define MZ_COUNT_T  unsigned long
+#else
+#define MZ_COUNT_T  unsigned int
+#endif
+
+#define MZ_RET_T      MZ_COUNT_T
+#define MZ_OFS_T      unsigned long long
+
 #ifdef __APPLE__
 #define ftello64 ftello
 #define fseeko64 fseeko
@@ -5103,8 +5112,12 @@ tm safe_localtime(const time_t &t)
 #endif
 }
 
-static unsigned int write_callback(void *opaque, std::uint64_t file_ofs, const void *pBuf, std::size_t n)
-{
+static MZ_RET_T write_callback(
+    void *opaque, 
+    MZ_OFS_T file_ofs, 
+    const void *pBuf, 
+    MZ_COUNT_T n
+) {
     auto buffer = static_cast<std::vector<char> *>(opaque);
     
     if(file_ofs + n > buffer->size())
