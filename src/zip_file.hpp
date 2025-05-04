@@ -255,20 +255,21 @@
 #endif
 
 #if defined(_WIN32) || defined(_WIN64)
-    //windows — at minizip all as uint64_t
-    #define MZ_COUNT_T  std::uint64_t
-    #define MZ_RET_T    std::uint64_t
+    //windows: uint64_t
+#define MZ_RET_T    unsigned long long
+#define MZ_OFS_T    unsigned long long
+#define MZ_COUNT_T  unsigned long long
+#elif defined(__ANDROID__) && defined(__aarch64__)
+    //android 64-bit ndk: ofs = unsigned long long, size = unsigned long, ret = unsigned long
+#define MZ_RET_T    unsigned long
+#define MZ_OFS_T    unsigned long long
+#define MZ_COUNT_T  unsigned long
 #else
-    //unix-like (android, macos, ios): lp64 / ilp32
-    #if defined(__LP64__) || defined(_LP64)
-        #define MZ_COUNT_T  unsigned long
-        #define MZ_RET_T    unsigned long
-    #else
-        #define MZ_COUNT_T  unsigned int
-        #define MZ_RET_T    unsigned int
-    #endif
+    //fallback (android32, ios, macos)
+#define MZ_RET_T    unsigned long
+#define MZ_OFS_T    unsigned long long
+#define MZ_COUNT_T  unsigned long
 #endif
-#define MZ_OFS_T std::uint64_t
 
 #ifdef __APPLE__
 #define ftello64 ftello
