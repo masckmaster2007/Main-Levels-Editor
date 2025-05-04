@@ -5110,9 +5110,9 @@ namespace miniz_cpp {
        //unsigned long (*)(void *, unsigned long long, const void *, unsigned long) 
        //unsigned long (*)(void *, unsigned long, const void *, unsigned long)
 #if defined(MINIZ_HAS_64BIT_REGISTERS)
-        unsigned int write_callback(void* opaque, unsigned long long file_ofs, const void* pBuf, unsigned int n)
+        std::size_t write_callback(void* opaque, unsigned long long file_ofs, const void* pBuf, std::size_t n)
 #else
-        std::size_t write_callback(void* opaque, unsigned long file_ofs, const void* pBuf, std::size_t n)
+        unsigned int write_callback(void* opaque, unsigned long file_ofs, const void* pBuf, unsigned int n)
 #endif
         {
             auto buffer = static_cast<std::vector<char> *>(opaque);
