@@ -5109,7 +5109,7 @@ namespace miniz_cpp {
        //
         std::size_t write_callback(void* pOpaque, mz_uint64 file_ofs, const void* pBuf, size_t n)
         {
-            auto buffer = static_cast<std::vector<char> *>(opaque);
+            auto buffer = static_cast<std::vector<char> *>(pOpaque);
 
             if (file_ofs + n > buffer->size())
             {
