@@ -5106,14 +5106,8 @@ namespace miniz_cpp {
 #endif
         }
 
-       //incompatible function pointer types assigning to 'mz_file_write_func'
-       //unsigned long (*)(void *, unsigned long long, const void *, unsigned long) 
-       //unsigned long (*)(void *, unsigned long, const void *, unsigned long)
-#if defined(MINIZ_HAS_64BIT_REGISTERS)
-        std::size_t write_callback(void* opaque, unsigned long long file_ofs, const void* pBuf, std::size_t n)
-#else
-        unsigned int write_callback(void* opaque, unsigned long file_ofs, const void* pBuf, unsigned int n)
-#endif
+       //
+        std::size_t write_callback(void* pOpaque, mz_uint64 file_ofs, const void* pBuf, size_t n)
         {
             auto buffer = static_cast<std::vector<char> *>(opaque);
 
