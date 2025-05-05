@@ -722,7 +722,7 @@ class $modify(MLE_LevelTools, LevelTools) {
     }
 
 };
-
+#if 0
 #include <Geode/modify/LevelSelectLayer.hpp>
 class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
 
@@ -938,8 +938,6 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
 #include <Geode/modify/LevelPage.hpp>
 class $modify(MLE_LevelPageExt, LevelPage) {
 
-#if defined(__ANDROID__) //#endif
-#else
     void updateDynamicPage(GJGameLevel * p0) {
         LevelPage::updateDynamicPage(p0);
         //difficultySprite
@@ -958,7 +956,6 @@ class $modify(MLE_LevelPageExt, LevelPage) {
             )), 1, 179823);
         }
     }
-#endif // !__ANDROID__
 
     void onPlay(cocos2d::CCObject * sender) {
         if (this) if (auto a = getParent()) if (auto scroll = typeinfo_cast<BoomScrollLayer*>(a->getParent())) {
@@ -984,6 +981,7 @@ class $modify(MLE_LevelPageExt, LevelPage) {
     }
 
 };
+#endif
 
 #include <Geode/modify/PauseLayer.hpp>
 class $modify(MLE_PauseExt, PauseLayer) {
