@@ -947,23 +947,32 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
             menu->addChild(menu_bg, -10);
         };
 
-        auto scroll = Ref(m_scrollLayer);
-        auto levels = Ref(scroll->m_dynamicObjects);
-        
-        if (!levels) levels = CCArray::create();
-        levels->removeAllObjects();
-
-        //LEVELS_LISTING
-        for (auto id : mle::getListingIDs()) {
-            auto level = Ref(GameLevelManager::get()->getMainLevel(id, 0));
-            levels->addObject(level);
-        }
-        if (scroll) scroll->setupDynamicScrolling(levels, this);
-        if (scroll) scroll->moveToPage(scroll->m_page);
-
         return true;
     }
 
+};
+#include <Geode/modify/BoomScrollLayer.hpp>
+class $modify(BoomScrollLayerExt, BoomScrollLayer) {
+    static BoomScrollLayer* create(cocos2d::CCArray * pages, int unk1, bool unk2, cocos2d::CCArray * unk3, DynamicScrollDelegate * delegate) {
+        
+        if ((uintptr_t)delegate != 0) { //paranoic check
+            auto _casted = typeinfo_cast<LevelSelectLayer*>(delegate);
+            if (_casted) {
+
+                Ref levels = CCArray::create();
+
+                //LEVELS_LISTING
+                for (auto id : mle::getListingIDs()) {
+                    auto level = Ref(GameLevelManager::get()->getMainLevel(id, 0));
+                    levels->addObject(level);
+                }
+
+                return BoomScrollLayer::create(pages, unk1, unk2, levels, Ref(_casted));
+            }
+        }
+
+        return BoomScrollLayer::create(pages, unk1, unk2, unk3, delegate);
+    }
 };
 
 #include <Geode/modify/LevelPage.hpp>
