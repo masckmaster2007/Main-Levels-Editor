@@ -12,6 +12,7 @@ Exporting and sharing levels:
 
 The .level file is a ZIP archive of:
 - _data.json
+- Songs and SFXs files (mp3/ogg)
 
 To replace level:
 - export your level in .level file
