@@ -662,7 +662,7 @@ class $modify(MLE_LocalLevelManager, LocalLevelManager) {
                 getMod()->getConfigDir() / "settings.json"_spr,
                 //by readen mod.id/settings.json data
                 file::readBinary(
-                    CCFileUtils::get()->fullPathForFilename("settings.json"_spr, 0)
+                    CCFileUtils::get()->fullPathForFilename("settings.json"_spr, 0).c_str()
                 ).unwrapOrDefault()
             );
             getMod()->loadData();
