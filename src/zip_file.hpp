@@ -5106,7 +5106,7 @@ namespace miniz_cpp {
 #endif
         }
 
-       //
+        //
         std::size_t write_callback(void* pOpaque, mz_uint64 file_ofs, const void* pBuf, size_t n)
         {
             auto buffer = static_cast<std::vector<char> *>(pOpaque);
@@ -5711,3 +5711,323 @@ namespace miniz_cpp {
     };
 
 } // namespace miniz_cpp
+
+#include <Geode/Geode.hpp>
+
+namespace geode::utils::file {
+
+    class CCMiniZFile : public cocos2d::CCObject {
+    protected:
+        std::unique_ptr<miniz_cpp::zip_file> m_zip;
+        std::string m_path;
+        bool m_isDirty = false;
+
+    public:
+        static Result<CCMiniZFile*> create(const std::string& path = "") {
+            auto inst = new CCMiniZFile();
+            if (!inst->initWithPath(path)) {
+                delete inst;
+                return Err("Failed to load or create zip file: " + path);
+            }
+            inst->autorelease();
+            return Ok(inst);
+        }
+
+        bool initWithPath(const std::string& path) {
+            m_path = path;
+            try {
+                if (std::filesystem::exists(path)) {
+                    m_zip = std::make_unique<miniz_cpp::zip_file>(path);
+                }
+                else {
+                    m_zip = std::make_unique<miniz_cpp::zip_file>();
+                }
+                return true;
+            }
+            catch (const std::exception& e) {
+                log::warn("miniz init error: {}", e.what());
+                return false;
+            }
+        }
+
+        const std::string& getPath() const { return m_path; }
+        const std::unique_ptr<miniz_cpp::zip_file>& getZipFile() const { return m_zip; }
+
+        bool hasFile(const std::string& name) const {
+            try {
+                return m_zip->has_file(name);
+            }
+            catch (...) {
+                return false;
+            }
+        }
+
+        Result<std::string> read(const std::string& name) const {
+            try {
+                if (!m_zip->has_file(name)) {
+                    return Err("File not found in archive: " + name);
+                }
+                return Ok(m_zip->read(name));
+            }
+            catch (const std::exception& e) {
+                return Err("Failed to read file from zip: " + std::string(e.what()));
+            }
+        }
+
+        Result<std::vector<uint8_t>> readBinary(const std::string& name) const {
+            try {
+                if (!m_zip->has_file(name)) {
+                    return Err("File not found in archive: " + name);
+                }
+                std::string strData = m_zip->read(name);
+                return Ok(std::vector<uint8_t>(strData.begin(), strData.end()));
+            }
+            catch (const std::exception& e) {
+                return Err("Failed to read binary data from zip: " + std::string(e.what()));
+            }
+        }
+
+        Result<cocos2d::CCString*> readCCString(const std::string& name) const {
+            std::string data;
+            GEODE_UNWRAP_INTO(data, read(name));
+            return Ok(cocos2d::CCString::createWithData((const unsigned char*)data.data(), data.size()));
+        }
+
+        Result<cocos2d::CCTexture2D*> readAsCCTexture(const std::string& name) const {
+            GEODE_UNWRAP_INTO(auto data, readBinary(name));
+
+            cocos2d::CCImage* image = new cocos2d::CCImage();
+            bool success = image->initWithImageData((void*)data.data(), data.size());
+            if (!success) {
+                image->release();
+                return Err("Failed to create CCImage from data: " + name);
+            }
+
+            cocos2d::CCTexture2D* texture = new cocos2d::CCTexture2D();
+            if (!texture->initWithImage(image)) {
+                texture->release();
+                image->release();
+                return Err("Failed to create CCTexture2D from CCImage: " + name);
+            }
+
+            texture->autorelease();
+            return Ok(texture);
+        }
+
+        Result<std::vector<std::string>> listFiles() const {
+            try {
+                return Ok(m_zip->namelist());
+            }
+            catch (const std::exception& e) {
+                return Err("Failed to list zip contents: " + std::string(e.what()));
+            }
+        }
+
+        Result<cocos2d::CCArray*> listFilesCCArray() const {
+            std::vector<std::string> list;
+            GEODE_UNWRAP_INTO(list, listFiles());
+            auto arr = cocos2d::CCArray::create();
+            for (const auto& f : list) {
+                arr->addObject(cocos2d::CCString::create(f));
+            }
+            return Ok(arr);
+        }
+
+        Result<> write(const std::string& name, const std::string& data) {
+            try {
+                m_zip->writestr(name, data);
+                m_isDirty = true;
+                return Ok();
+            }
+            catch (const std::exception& e) {
+                return Err("Failed to write file to zip: " + std::string(e.what()));
+            }
+        }
+
+        Result<> write(const std::string& name, const std::vector<uint8_t>& data) {
+            try {
+                m_zip->writestr(name, std::string(data.begin(), data.end()));
+                m_isDirty = true;
+                return Ok();
+            }
+            catch (const std::exception& e) {
+                return Err("Failed to write binary data to zip: " + std::string(e.what()));
+            }
+        }
+
+        Result<> removeFile(const std::string& name) {
+            try {
+                if (!m_zip->has_file(name)) {
+                    return Err("File not found in archive: " + name);
+                }
+
+                auto oldZip = std::move(m_zip);
+                m_zip = std::make_unique<miniz_cpp::zip_file>();
+
+                for (const auto& fname : oldZip->namelist()) {
+                    if (fname == name) continue;
+                    m_zip->writestr(fname, oldZip->read(fname));
+                }
+
+                m_isDirty = true;
+                return Ok();
+            }
+            catch (const std::exception& e) {
+                return Err("Failed to remove file from zip: " + std::string(e.what()));
+            }
+        }
+
+        Result<> removeFiles(const std::vector<std::string>& names) {
+            try {
+                std::unordered_set<std::string> nameSet(names.begin(), names.end());
+
+                auto oldZip = std::move(m_zip);
+                m_zip = std::make_unique<miniz_cpp::zip_file>();
+
+                for (const auto& fname : oldZip->namelist()) {
+                    if (nameSet.count(fname) == 0) {
+                        m_zip->writestr(fname, oldZip->read(fname));
+                    }
+                }
+
+                m_isDirty = true;
+                return Ok();
+            }
+            catch (const std::exception& e) {
+                return Err("Failed to remove files from zip: " + std::string(e.what()));
+            }
+        }
+
+        Result<> clear() {
+            try {
+                m_zip = std::make_unique<miniz_cpp::zip_file>();
+                m_isDirty = true;
+                return Ok();
+            }
+            catch (const std::exception& e) {
+                return Err("Failed to clear zip: " + std::string(e.what()));
+            }
+        }
+
+        Result<> extractFile(const std::string& name, const std::string& outputPath) const {
+            try {
+                if (!m_zip->has_file(name)) {
+                    return Err("File not found in archive: " + name);
+                }
+                std::string data = m_zip->read(name);
+                std::ofstream out(outputPath, std::ios::binary);
+                if (!out) return Err("Failed to open output file: " + outputPath);
+                out.write(data.data(), data.size());
+                out.close();
+                return Ok();
+            }
+            catch (const std::exception& e) {
+                return Err("Failed to extract file: " + std::string(e.what()));
+            }
+        }
+
+        Result<> extractAll(const std::string& outputDir) const {
+            std::vector<std::string> files;
+            GEODE_UNWRAP_INTO(files, listFiles());
+
+            for (const auto& name : files) {
+                auto outputPath = std::filesystem::path(outputDir) / name;
+                std::filesystem::create_directories(outputPath.parent_path());
+                GEODE_UNWRAP(extractFile(name, outputPath.string()));
+            }
+
+            return Ok();
+        }
+
+        Result<> save() {
+            if (!m_isDirty) return Ok();
+            try {
+                m_zip->save(m_path);
+                m_isDirty = false;
+                return Ok();
+            }
+            catch (const std::exception& e) {
+                return Err("Failed to save zip: " + std::string(e.what()));
+            }
+        }
+
+        Result<> saveAs(const std::string& newPath) {
+            try {
+                m_zip->save(newPath);
+                return Ok();
+            }
+            catch (const std::exception& e) {
+                return Err("Failed to save zip as " + newPath + ": " + std::string(e.what()));
+            }
+        }
+    };
+
+    void testCCMiniZFile() {
+        std::string log;
+
+        log += "```\n";
+
+        auto path = (dirs::getGameDir() / "test.zip");
+
+        auto zip_opn = CCMiniZFile::create(path.string());
+        if (zip_opn.isOk()) log += "Archive loaded\n";
+        else log += "<cr>Archive wasn't loaded: " + zip_opn.err().value_or("unk") + "</c>\n";
+
+        auto zip = zip_opn.unwrapOrDefault();
+
+        if (auto resWrite = zip->write("hello.txt", "Hello Geode!")) {
+            log += "File 'hello.txt' written.\n";
+        }
+        else {
+            log += "<cr>Write error: " + resWrite.err().value_or("unk") + "</c>\n";
+        }
+
+        if (auto resWrite = zip->write("deleteme.txt", "Hello Geode!")) {
+            log += "File 'deleteme.txt' written.\n";
+        }
+        else {
+            log += "<cr>Write error: " + resWrite.err().value_or("unk") + "</c>\n";
+        }
+
+        if (auto resReadBin = zip->readBinary("deleteme.txt")) {
+            log += "ReadBinary deleteme.txt: size = " + utils::numToString(
+                resReadBin.unwrapOrDefault().size()
+            ) + "\n";
+        }
+        else {
+            log += "<cr>ReadBinary error: " + resReadBin.err().value_or("unk") + "</c>\n";
+        }
+
+        if (auto resRemove = zip->removeFile("deleteme.txt")) {
+            log += "File 'deleteme.txt' removed.\n";
+        }
+        else {
+            log += "<cr>Remove error: " + resRemove.err().value_or("unk") + "</c>\n";
+        }
+
+        if (auto resSave = zip->save()) {
+            log += "Archive saved.\n";
+        }
+        else {
+            log += "<cr>Save error: " + resSave.err().value_or("unk") + "</c>\n";
+        }
+
+        log += "```\n --- \n```\n";
+
+        if (auto zip_opn = CCMiniZFile::create(path.string())) {
+            auto zip = zip_opn.unwrapOrDefault();
+            log += "Created archive loaded\n";
+            if (auto e = zip->listFiles()) for (auto file : e.unwrapOrDefault()) {
+                log += "- " + file + "\n";
+            }
+            else log += "Failed to list files:" + e.err().value_or("unk") + "\n";
+        }
+        else log += "<cr>Failed to load created archive: " + zip_opn.err().value_or("unk") + "</c>\n";
+
+        log += "\n```";
+
+        auto popup = MDPopup::create("CCMiniZFile Test Log", log, "Close");
+        popup->show();
+    }
+
+} // namespace geode::utils::file

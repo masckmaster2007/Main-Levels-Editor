@@ -277,10 +277,14 @@ namespace level {
         if (!level) return Err("level ptr is null.");
         if (!typeinfo_cast<GJGameLevel*>(level)) return Err("level ptr is not GJGameLevel typed in RTTI.");
 
-        miniz_cpp::zip_file file;
+        auto ignored_error = std::error_code();
+        std::filesystem::create_directories(to.parent_path(), ignored_error);
+        std::filesystem::remove(to, ignored_error);
+
+        GEODE_UNWRAP_INTO(auto file, file::CCMiniZFile::create(to.string()));
 
         auto json = jsonFromLevel(level);
-        file.writestr("_data.json", json.dump());
+        GEODE_UNWRAP(file->write("_data.json", json.dump()));
 
         //primary song id isnt 0
         if (level->m_songID) {
@@ -291,7 +295,10 @@ namespace level {
             path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
             //add if exists
             if (fileExistsInSearchPaths(path.string().c_str())) {
-                file.write(path.string(), std::filesystem::path(path).filename().string());
+                GEODE_UNWRAP(file->write(
+                    std::filesystem::path(path).filename().string()
+                    , file::readBinary(path).unwrapOrDefault()
+                ));
             }
         }
 
@@ -304,7 +311,10 @@ namespace level {
             path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
             //add if exists
             if (fileExistsInSearchPaths(path.string().c_str())) {
-                file.write(path.string(), std::filesystem::path(path).filename().string());
+                GEODE_UNWRAP(file->write(
+                    std::filesystem::path(path).filename().string()
+                    , file::readBinary(path).unwrapOrDefault()
+                ));
             };
         }
 
@@ -317,11 +327,14 @@ namespace level {
             path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
             //add if exists
             if (fileExistsInSearchPaths(path.string().c_str())) {
-                file.write(path.string(), std::filesystem::path(path).filename().string());
+                GEODE_UNWRAP(file->write(
+                    std::filesystem::path(path).filename().string()
+                    , file::readBinary(path).unwrapOrDefault()
+                ));
             }
         }
 
-        file.save(to.string());
+        GEODE_UNWRAP(file->save());
 
         return Ok(json);
     };
@@ -333,14 +346,13 @@ namespace level {
         if (!level) return Err("level ptr is null.");
         if (!typeinfo_cast<GJGameLevel*>(level)) return Err("level ptr is not GJGameLevel typed in RTTI.");
 
-        miniz_cpp::zip_file file(from.string());
+        GEODE_UNWRAP_INTO(auto file, file::CCMiniZFile::create(from.string()));
 
-        auto tempFile = (dirs::getTempDir() / GEODE_MOD_ID"-unzip.temp");
-
-        GEODE_UNWRAP_INTO(auto data, matjson::parse(file.read("_data.json")));
+        GEODE_UNWRAP_INTO(auto __data_read, file->read("_data.json"));
+        GEODE_UNWRAP_INTO(auto data, matjson::parse(__data_read));
         updateLevelByJson(data, level);
 
-        log::debug("data from zip: {}", data.dump());
+        //log::debug("data from zip: {}", data.dump());
 
         //primary song id isnt 0
         if (level->m_songID) {
@@ -349,9 +361,8 @@ namespace level {
             path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
             if (!fileExistsInSearchPaths(path.string().c_str())) {
                 auto atzip = std::filesystem::path(path).filename().string();
-                auto str = file.read(file.getinfo(atzip));
-                std::vector<uint8_t> bin(str.begin(), str.end());
-                GEODE_UNWRAP(file::writeBinary(path, bin));
+                GEODE_UNWRAP_INTO(auto __data_read, file->readBinary(atzip));
+                GEODE_UNWRAP(file::writeBinary(path, __data_read));
             };
         }
 
@@ -364,9 +375,8 @@ namespace level {
             //add if exists
             if (!fileExistsInSearchPaths(path.string().c_str())) {
                 auto atzip = std::filesystem::path(path).filename().string();
-                auto str = file.read(file.getinfo(atzip));
-                std::vector<uint8_t> bin(str.begin(), str.end());
-                GEODE_UNWRAP(file::writeBinary(path, bin));
+                GEODE_UNWRAP_INTO(auto __data_read, file->readBinary(atzip));
+                GEODE_UNWRAP(file::writeBinary(path, __data_read));
             }
         }
 
@@ -379,9 +389,8 @@ namespace level {
             //add if exists
             if (!fileExistsInSearchPaths(path.string().c_str())) {
                 auto atzip = std::filesystem::path(path).filename().string();
-                auto str = file.read(file.getinfo(atzip));
-                std::vector<uint8_t> bin(str.begin(), str.end());
-                GEODE_UNWRAP(file::writeBinary(path, bin));
+                GEODE_UNWRAP_INTO(auto __data_read, file->readBinary(atzip));
+                GEODE_UNWRAP(file::writeBinary(path, __data_read));
             }
         }
 
@@ -645,6 +654,20 @@ class $modify(MLE_LocalLevelManager, LocalLevelManager) {
     bool init() {
         if (!LocalLevelManager::init()) return false;
 
+        log::info("searching for custom settings enforcement file {}...", "settings.json"_spr);
+        if (fileExistsInSearchPaths("settings.json"_spr)) {
+            log::info("found custom settings enforcement file {}!", "settings.json"_spr);
+            file::writeBinary(
+                //settings.json in save dir will be overwritten
+                getMod()->getConfigDir() / "settings.json"_spr,
+                //by readen mod.id/settings.json data
+                file::readBinary(
+                    CCFileUtils::get()->fullPathForFilename("settings.json"_spr, 0)
+                ).unwrapOrDefault()
+            );
+            getMod()->loadData();
+        }
+
         log::debug("loading .level files by list {}", mle::getListingIDs());
         for (auto id : mle::getListingIDs()) {
 
@@ -695,6 +718,9 @@ class $modify(MLE_GameLevelManager, GameLevelManager) {
             level->m_requiredCoins = loadedLevel->m_requiredCoins;
             level->m_levelName = loadedLevel->m_levelName;
             level->m_audioTrack = loadedLevel->m_audioTrack;
+            level->m_songID = loadedLevel->m_songID;
+            level->m_songIDs = loadedLevel->m_songIDs;
+            level->m_sfxIDs = loadedLevel->m_sfxIDs;
             level->m_demon = (loadedLevel->m_demon.value());
             level->m_twoPlayerMode = loadedLevel->m_twoPlayerMode;
             level->m_difficulty = loadedLevel->m_difficulty;
@@ -722,7 +748,7 @@ class $modify(MLE_LevelTools, LevelTools) {
     }
 
 };
-#if 0
+
 #include <Geode/modify/LevelSelectLayer.hpp>
 class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
 
@@ -921,14 +947,19 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
             menu->addChild(menu_bg, -10);
         };
 
-        m_scrollLayer->m_dynamicObjects->removeAllObjects();
+        auto scroll = Ref(m_scrollLayer);
+        auto levels = Ref(scroll->m_dynamicObjects);
+        
+        if (!levels) levels = CCArray::create();
+        levels->removeAllObjects();
 
         //LEVELS_LISTING
         for (auto id : mle::getListingIDs()) {
-            m_scrollLayer->m_dynamicObjects->addObject(GameLevelManager::get()->getMainLevel(id, 0));
+            auto level = Ref(GameLevelManager::get()->getMainLevel(id, 0));
+            levels->addObject(level);
         }
-        m_scrollLayer->setupDynamicScrolling(m_scrollLayer->m_dynamicObjects, this);
-        m_scrollLayer->moveToPage(m_scrollLayer->m_page);
+        if (scroll) scroll->setupDynamicScrolling(levels, this);
+        if (scroll) scroll->moveToPage(scroll->m_page);
 
         return true;
     }
@@ -939,10 +970,11 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
 class $modify(MLE_LevelPageExt, LevelPage) {
 
     void updateDynamicPage(GJGameLevel * p0) {
-        LevelPage::updateDynamicPage(p0);
+        auto level = Ref(p0);
+        LevelPage::updateDynamicPage(level);
         //difficultySprite
         if (auto difficultySprite = typeinfo_cast<CCSprite*>(this->getChildByIDRecursive("difficulty-sprite"))) {
-            std::string frameName = GJDifficultySprite::getDifficultyFrame((int)p0->m_difficulty, GJDifficultyName::Short).data();
+            std::string frameName = GJDifficultySprite::getDifficultyFrame((int)level->m_difficulty, GJDifficultyName::Short).data();
             frameName = string::replace(frameName, "difficulty", "diffIcon");
             if (auto frame = CCSpriteFrameCache::get()->spriteFrameByName(frameName.data()))
                 difficultySprite->setDisplayFrame(frame);
@@ -952,7 +984,7 @@ class $modify(MLE_LevelPageExt, LevelPage) {
             this->removeChildByTag(179823);
             this->addChild(SimpleTextArea::create(fmt::format(
                 "                                                                       id: {}\n \n \n \n \n \n \n "
-                , p0->m_levelID.value()
+                , level->m_levelID.value()
             )), 1, 179823);
         }
     }
@@ -981,7 +1013,6 @@ class $modify(MLE_LevelPageExt, LevelPage) {
     }
 
 };
-#endif
 
 #include <Geode/modify/PauseLayer.hpp>
 class $modify(MLE_PauseExt, PauseLayer) {
@@ -1024,12 +1055,12 @@ class $modify(MLE_PauseExt, PauseLayer) {
                                     body << "\n";
                                     body << "\n" "```";
                                     body << "\n" "zip tree of \"" << std::filesystem::path(path).filename().string() << "\": ";
-                                    auto unzip = file::Unzip::create(path);
+                                    auto unzip = file::CCMiniZFile::create(string::pathToString(path));
                                     if (unzip.err()) body
                                         << "\n" "FAILED TO OPEN CREATED ZIP!"
                                         << "\n" << unzip.err().value_or("unk err");
-                                    else for (auto entry : unzip.unwrap().getEntries()) body
-                                        << "\n- " << entry.string();
+                                    else for (auto entry : unzip.unwrap()->listFiles().unwrapOrDefault()) body
+                                        << "\n- " << entry.c_str();
                                     body << "\n" "```";
                                     body << "\n";
                                     body << "\n" "```";
