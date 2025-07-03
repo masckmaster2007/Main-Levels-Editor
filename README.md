@@ -6,6 +6,8 @@ developing v8 rn/
 
 ### Temporary guide
 
+#### <cr>at first i recommend you to read each setting info.</c>
+
 Exporting and sharing levels: 
 - "Export as .level file" button added to level pause layer. 
 - By using this button you can create .level file of level you currently played and paused. 
@@ -25,5 +27,3 @@ To add as new one:
 - copy its id (f.e. 1337)
 - add id to level listing setting (1337,1-22,-2,-1)
 - reload game
-
-Its recommended to read level listing setting info.
