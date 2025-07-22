@@ -10,7 +10,7 @@ using namespace geode::prelude;
 #define REPLACE_DIFFICULTY_SPRITE getMod()->getSettingValue<bool>("REPLACE_DIFFICULTY_SPRITE")
 #define TYPE_AND_ID_HACKS_FOR_SECRET_COINS getMod()->getSettingValue<bool>("TYPE_AND_ID_HACKS_FOR_SECRET_COINS")
 
-//here is a custom shared level format ".level" like ".gmd2", saves sfx and almost all level values.
+// the custom shared level format ".level" like ".gmd2", saves audio and almost all level data.
 namespace level {
 
     auto LOADED_FILES_CHECKPOINTS = std::map<std::filesystem::path, size_t>{};
@@ -21,7 +21,7 @@ namespace level {
         json["levelID"] = level->m_levelID.value();
         json["levelName"] = level->m_levelName.c_str();
         json["levelDesc"] = level->m_levelDesc.c_str();
-        json["levelString"] = level->m_levelString.c_str();
+        //json["levelString"] = level->m_levelString.c_str(); moved to end
         json["creatorName"] = level->m_creatorName.c_str();
         json["recordString"] = level->m_recordString.c_str();
         json["uploadDate"] = level->m_uploadDate.c_str();
@@ -137,6 +137,9 @@ namespace level {
         json["k111"] = level->m_k111;
         json["unkString3"] = level->m_unkString3.c_str();
         json["unkString4"] = level->m_unkString4.c_str();
+
+        json["levelString"] = level->m_levelString.c_str();
+
         return json;
     }
 
@@ -397,6 +400,11 @@ namespace level {
             }
         }
 
+        auto xd = CCNode::create();
+        xd->setID(from.string());
+        xd->setTag("is-imported-from-file"_h);
+        level->addChild(xd);
+
         return Ok(level);
     };
 
@@ -466,7 +474,7 @@ namespace mle {
             auto path = CCFileUtils::get()->fullPathForFilename(levelFileName.c_str(), 0);
             level = level::importLevelFile(path.c_str()).unwrapOr(level);
         }
-        else log::debug("don't exists in searchpaths: {}", levelFileName.c_str());
+        else log::debug("don't exists in search paths: {}", levelFileName.c_str());
 
         if (!appendSubDir) return tryLoadFromFiles(level, customLvlID, true);
         return level;
@@ -517,8 +525,10 @@ protected:
         scroll->ignoreAnchorPointForPosition(0);
         this->m_buttonMenu->addChildAtPosition(scroll, Anchor::Center, { 0.f, 0.0f });
 
-        auto json = level::jsonFromLevel(editor->m_level);
-        for (auto asd : json) {
+        auto json = std::shared_ptr<matjson::Value>(
+            new matjson::Value(level::jsonFromLevel(editor->m_level))
+        );
+        for (auto asd : *json.get()) {
             auto key = asd.getKey().value_or("unnamed obj");
             if (string::containsAny(key, { "levelString" })) continue;
 
@@ -541,18 +551,19 @@ protected:
             auto keyValInput = TextInput::create(132.f, key, keyLabel->getFont());
 
             keyValInput->setString(asd.dump());
-            keyValInput->setCallback([json, key, editor, keyInputErr](auto str) { //INPUT CALLBACK
+            keyValInput->setCallback([=](auto str) mutable { //INPUT CALLBACK
 
                 keyInputErr->setString("");
 
                 auto parse = matjson::parse(str);
                 if (parse.isOk()) {
-                    auto copy = matjson::Value(json);
-                    copy[key] = parse.unwrapOrDefault();
-                    level::updateLevelByJson(copy, editor->m_level);
+                    (*json.get())[key] = parse.unwrapOrDefault();
+                    level::updateLevelByJson(json, editor->m_level);
                 }
                 else {
-                    if (parse.err().has_value()) keyInputErr->setString(("parse err: " + parse.err().value().message).c_str());
+                    if (parse.err()) keyInputErr->setString(
+                        ("parse err: " + parse.err().value().message).c_str()
+                    );
                 };
 
                 }); //INPUT CALLBACK
@@ -639,6 +650,238 @@ public:
     }
 };
 
+class MainLevelsEditorMenu : public geode::Popup<> {
+protected:
+    EventListener<Task<Result<std::filesystem::path>>> m_pickListener;
+    bool setup() override {
+        this->setTitle("Main Levels Editor");
+
+        auto menu = CCMenu::create();
+        menu->setContentHeight(202.f);
+        this->m_mainLayer->addChildAtPosition(menu, Anchor::Center, { 0.f, -12.f });
+
+        auto btnspr = [](const char* a) {
+            auto aw = ButtonSprite::create(a, "bigFont.fnt", "GJ_button_05.png");
+            return aw;
+            };
+
+        CCMenuItemSpriteExtra* settings = CCMenuItemExt::createSpriteExtra(
+            btnspr("Open Settings"),
+            [__this = Ref(this)](auto) {
+                openSettingsPopup(getMod(), 1);
+            }
+        );
+        settings->setID("settings"_spr);
+        menu->addChild(settings);
+
+        CCMenuItemSpriteExtra* reload_levels_cache = CCMenuItemExt::createSpriteExtra(
+            btnspr("Reload levels cache"),
+            [__this = Ref(this)](auto) {
+                LocalLevelManager::get()->init();
+                //(LevelSelectLayer::create(__this = Ref(this)->m_scrollLayer->m_page));
+                Notification::create("local level manager was reinitialized", NotificationIcon::Info)->show();
+            }
+        );
+        reload_levels_cache->setID("reload_levels_cache"_spr);
+        menu->addChild(reload_levels_cache);
+
+        CCMenuItemSpriteExtra* load_level = CCMenuItemExt::createSpriteExtra(
+            btnspr("Open .level file"),
+            [__this = Ref(this)](auto) {
+                auto IMPORT_PICK_OPTIONS = file::FilePickOptions{
+                    std::nullopt, {{ "Extended Shared Level File", { "*.level" } }}
+                };
+                //IMPORT_PICK_OPTIONS.defaultPath;
+                __this->m_pickListener.bind([__this](Task<Result<std::filesystem::path>>::Event* event)
+                    {
+                        if (auto result = event->getValue(); result->isOk()) {
+                            auto path = result->unwrap();
+                            path = string::endsWith(path.string(), ".level") ? path : std::filesystem::path(path.string() + ".level");
+                            auto level_import = level::importLevelFile(path);
+                            if (level_import.isOk()) {
+                                auto level = level_import.unwrapOrDefault();
+                                auto pages = CCArray::create();
+                                pages->addObject(LevelInfoLayer::create(level, 0));
+                                pages->addObject(EditLevelLayer::create(level));
+                                pages->addObject([level] {
+                                    auto a = LevelPage::create(level);
+                                    a->updateDynamicPage(level);
+                                    return a;
+                                    }());
+                                auto layer = BoomScrollLayer::create(pages, 0, 0);
+                                layer->m_extendedLayer->runAction(CCSequence::create(
+                                    CCEaseBackOut::create(CCMoveBy::create(1.0f, { -42.f, 0.f })),
+                                    CCEaseExponentialIn::create(CCMoveBy::create(0.5f, { 42.f, 0.f })),
+                                    CallFuncExt::create([layer] { layer->moveToPage(layer->m_page); }),
+                                    nullptr
+                                ));
+                                layer->addChild(createLayerBG(), -36);
+                                layer->setPagesIndicatorPosition({ 74.f, layer->getContentHeight() - (320.000f - 312.000f) });
+                                {
+                                    auto dotsBG = CCScale9Sprite::create("square02_small.png");
+                                    dotsBG->setPosition(layer->m_dotPosition);
+                                    dotsBG->setAnchorPoint(CCPointMake(0.5f, 0.1f));
+                                    dotsBG->setContentSize(CCSizeMake(52.f, 77.f));
+                                    dotsBG->setOpacity(122);
+                                    layer->addChild(dotsBG, 0);
+                                }
+                                switchToScene(layer);
+                            }
+                            else {
+                                //aaaa msg
+                                Notification::create("failed to load level!", NotificationIcon::Warning)->show();
+                                //and err
+                                if (level_import.err()) Notification::create(
+                                    level_import.err().value_or("UNK ERROR")
+                                    , NotificationIcon::Error
+                                )->show();
+                            }
+                        }
+                        else FLAlertLayer::create("Failed to get picked path", result->unwrapErr(), "OK")->show();
+                    }
+                );
+                __this->m_pickListener.setFilter(file::pick(file::PickMode::OpenFile, IMPORT_PICK_OPTIONS));
+            }
+        );
+        load_level->setID("export_level"_spr);
+        menu->addChild(load_level);
+
+        CCMenuItemSpriteExtra* edit_level = CCMenuItemExt::createSpriteExtra(
+            btnspr("Edit .level file"),
+            [__this = Ref(this)](auto) {
+                auto IMPORT_PICK_OPTIONS = file::FilePickOptions{
+                    std::nullopt, {{ "Extended Shared Level File", { "*.level" } }}
+                };
+                //IMPORT_PICK_OPTIONS.defaultPath;
+                __this->m_pickListener.bind([__this](Task<Result<std::filesystem::path>>::Event* event)
+                    {
+                        if (auto result = event->getValue(); result->isOk()) {
+                            auto path = result->unwrap();
+                            path = string::endsWith(path.string(), ".level") ? path : std::filesystem::path(path.string() + ".level");
+                            auto level_import = level::importLevelFile(path);
+                            if (level_import.isOk()) {
+                                auto level = level_import.unwrapOrDefault();
+                                auto layer = LevelEditorLayer::create(level, 0);
+                                switchToScene(layer);
+                            }
+                            else {
+                                //aaaa msg
+                                Notification::create("failed to load level!", NotificationIcon::Warning)->show();
+                                //and err
+                                if (level_import.err()) Notification::create(
+                                    level_import.err().value_or("UNK ERROR")
+                                    , NotificationIcon::Error
+                                )->show();
+                            }
+                        }
+                        else FLAlertLayer::create("Failed to get picked path", result->unwrapErr(), "OK")->show();
+                    }
+                );
+                __this->m_pickListener.setFilter(file::pick(file::PickMode::OpenFile, IMPORT_PICK_OPTIONS));
+            }
+        );
+        edit_level->setID("edit_level"_spr);
+        menu->addChild(edit_level);
+
+        CCMenuItemSpriteExtra* export_level = CCMenuItemExt::createSpriteExtra(
+            btnspr("Export into .level file"),
+            [__this = Ref(this)](CCMenuItem*) {
+                if (!GameManager::get()->getGameLayer()) {
+                    Notification::create("You are not in a level", NotificationIcon::Error)->show();
+                    return;
+                }
+                auto level = GameManager::get()->getGameLayer()->m_level;
+                auto IMPORT_PICK_OPTIONS = file::FilePickOptions{
+                    std::nullopt, {{ "Extended Shared Level File", { "*.level" } }}
+                };
+                IMPORT_PICK_OPTIONS.defaultPath = getMod()->getConfigDir() / fmt::format("{}.level", level->m_levelID.value());
+                __this->m_pickListener.bind([__this, level](Task<Result<std::filesystem::path>>::Event* event)
+                    {
+                        if (auto result = event->getValue(); result->isOk()) {
+                            //path
+                            auto path = string::endsWith( //result->unwrap()result->unwrap()result->unwrap()
+                                result->unwrapOrDefault().string(), ".level" //str ends w .lvl
+                            ) ? result->unwrapOrDefault() : std::filesystem::path(result->unwrapOrDefault().string() + ".level");
+                            //dir
+                            auto dir = path.parent_path();
+                            //exporting.
+                            auto level_export = level::exportLevelFile(level, path);
+                            if (level_export.isOk()) {
+                                auto dbg_json = level_export.unwrapOrDefault();
+                                dbg_json["levelString"] = dbg_json["levelString"].asString().unwrapOrDefault().erase(36, 9999999) + "...";
+
+                                auto body = std::stringstream();
+
+                                body << """" "`  File:` [" + path.string() + "](file:///" + string::replace(path.string(), " ", "%20") + ")";
+                                body << "\n";
+                                body << "\n" "`   Dir:` [" + dir.string() + "](file:///" + string::replace(dir.string(), " ", "%20") + ")";
+                                body << "\n";
+                                body << "\n" "```";
+                                body << "\n" "zip tree of \"" << std::filesystem::path(path).filename().string() << "\": ";
+                                auto unzip = file::CCMiniZFile::create(string::pathToString(path));
+                                if (unzip.err()) body
+                                    << "\n" "FAILED TO OPEN CREATED ZIP!"
+                                    << "\n" << unzip.err().value_or("unk err");
+                                else for (auto entry : unzip.unwrap()->listFiles().unwrapOrDefault()) body
+                                    << "\n- " << entry.c_str();
+                                body << "\n" "```";
+                                body << "\n";
+                                body << "\n" "```";
+                                body << "\n" "data \"" << std::filesystem::path(path).filename().string() << "\": ";
+                                for (auto entry : dbg_json) body
+                                    << "\n- " << entry.getKey().value_or("unk") + ": " << entry.dump();
+                                body << "\n" "```";
+
+                                MDPopup::create(
+                                    "Level Exported!",
+                                    body.str(),
+                                    "Ok"
+                                )->show();
+                            }
+                            else {
+                                //aaaa msg
+                                Notification::create("failed to save level!", NotificationIcon::Warning)->show();
+                                //and err
+                                if (level_export.err()) Notification::create(
+                                    level_export.err().value_or("UNK ERROR")
+                                    , NotificationIcon::Error
+                                )->show();
+                                log::error("{}", level_export.err());
+                            }
+                        }
+                        else FLAlertLayer::create("Failed to get picked path", result->unwrapErr(), "OK")->show();
+                    }
+                );
+                __this->m_pickListener.setFilter(file::pick(file::PickMode::SaveFile, IMPORT_PICK_OPTIONS));
+            }
+        );
+        export_level->setID("export_level"_spr);
+        menu->addChild(export_level);
+
+        menu->setLayout(ColumnLayout::create()->setAxisReverse(true));
+        limitNodeWidth(menu, this->m_mainLayer->getContentWidth() - 16.f, 1.f, 0.1f);
+
+        return true;
+    }
+public:
+    static MainLevelsEditorMenu* create() {
+        auto ret = new MainLevelsEditorMenu();
+        if (ret->initAnchored(240.000f, 156.000f)) {
+            ret->autorelease();
+            return ret;
+        }
+        delete ret;
+        return nullptr;
+    }
+    static auto createButtonForMe() {
+        auto item = CCMenuItemExt::createSpriteExtra(createModLogo(getMod()),
+            [](CCObject* sender) { create()->show(); }
+        );
+		item->setID("menu-button"_spr);
+		return item;
+    }
+};
+
 void ModLoaded() {
     auto sp = std::vector<std::filesystem::path>{};
     sp.push_back(getMod()->getSaveDir());
@@ -648,365 +891,6 @@ void ModLoaded() {
     for (auto p : sp) CCFileUtils::get()->addPriorityPath(p.string().c_str());
 }
 $on_mod(Loaded) { ModLoaded(); }
-
-#include <Geode/modify/MenuLayer.hpp>
-class $modify(MainLevelsEditorMenu, MenuLayer) {
-    class Popup : public geode::Popup<> {
-    protected:
-        EventListener<Task<Result<std::filesystem::path>>> m_pickListener;
-        bool setup() override {
-            this->setTitle("Main Levels Editor");
-            
-            auto menu = CCMenu::create();
-            menu->setContentHeight(202.f);
-            this->m_mainLayer->addChildAtPosition(menu, Anchor::Center, { 0.f, -12.f });    
-
-            auto btnspr = [](const char* a) {
-                auto aw = ButtonSprite::create(a, "bigFont.fnt", "GJ_button_05.png"); 
-                return aw;
-                };
-
-            CCMenuItemSpriteExtra* settings = CCMenuItemExt::createSpriteExtra(
-                btnspr("Open Settings"),
-                [__this = Ref(this)](auto) {
-                    openSettingsPopup(getMod(), 1);
-                }
-            );
-            settings->setID("settings"_spr);
-            menu->addChild(settings);
-
-            CCMenuItemSpriteExtra* reload_levels_cache = CCMenuItemExt::createSpriteExtra(
-                btnspr("Reload levels cache"),
-                [__this = Ref(this)](auto) {
-                    LocalLevelManager::get()->init();
-                    //(LevelSelectLayer::create(__this = Ref(this)->m_scrollLayer->m_page));
-                    Notification::create("local level manager was reinitialized", NotificationIcon::Info)->show();
-                }
-            );
-            reload_levels_cache->setID("reload_levels_cache"_spr);
-            menu->addChild(reload_levels_cache);
-
-            CCMenuItemSpriteExtra* load_level = CCMenuItemExt::createSpriteExtra(
-                btnspr("Open .level file"),
-                [__this = Ref(this)](auto) {
-                    auto IMPORT_PICK_OPTIONS = file::FilePickOptions{
-                        std::nullopt, {{ "Extended Shared Level File", { "*.level" } }}
-                    };
-                    //IMPORT_PICK_OPTIONS.defaultPath;
-                    __this->m_pickListener.bind([__this](Task<Result<std::filesystem::path>>::Event* event)
-                        {
-                            if (auto result = event->getValue()) if (result->isOk()) {
-                                auto path = result->unwrap();
-                                path = string::endsWith(path.string(), ".level") ? path : std::filesystem::path(path.string() + ".level");
-                                auto level_import = level::importLevelFile(path);
-                                if (level_import.isOk()) {
-                                    auto level = level_import.unwrapOrDefault();
-                                    auto pages = CCArray::create();
-                                    pages->addObject(LevelInfoLayer::create(level, 0));
-                                    pages->addObject(EditLevelLayer::create(level));
-                                    pages->addObject([level] {
-                                        auto a = LevelPage::create(level);
-                                        a->updateDynamicPage(level);
-                                        return a;
-                                        }());
-                                    auto layer = BoomScrollLayer::create(pages, 0, 0);
-                                    layer->m_extendedLayer->runAction(CCSequence::create(
-                                        CCEaseBackOut::create(CCMoveBy::create(1.0f, { -42.f, 0.f })),
-                                        CCEaseExponentialIn::create(CCMoveBy::create(0.5f, { 42.f, 0.f })),
-                                        CallFuncExt::create([layer] { layer->moveToPage(layer->m_page); }),
-                                        nullptr
-                                    ));
-                                    layer->addChild(createLayerBG(), -36);
-                                    auto hideaway = [layer](std::string id) {while (auto background = layer->getChildByIDRecursive(id)) {
-                                        background->setVisible(0);
-                                        background->setID("hidden-" + id);
-                                    }};
-                                    hideaway("background");
-                                    hideaway("bottom-left-art");
-                                    hideaway("bottom-right-art");
-                                    if (auto a1 = layer->getChildByIDRecursive("LevelPage"))
-                                        if (auto a2 = a1->getChildByIDRecursive("hidden-background"))
-                                            a2->setVisible(1);
-                                    layer->setPagesIndicatorPosition({ 74.f, layer->getContentHeight() - (320.000f - 312.000f) });
-                                    {
-                                        auto dotsBG = CCScale9Sprite::create("square02_small.png");
-                                        dotsBG->setPosition(layer->m_dotPosition);
-                                        dotsBG->setAnchorPoint(CCPointMake(0.5f, 0.1f));
-                                        dotsBG->setContentSize(CCSizeMake(52.f, 77.f));
-                                        dotsBG->setOpacity(122);
-                                        layer->addChild(dotsBG, 0);
-                                    }
-                                    switchToScene(layer);
-                                }
-                                else {
-                                    //aaaa msg
-                                    Notification::create("failed to load level!", NotificationIcon::Warning)->show();
-                                    //and err
-                                    if (level_import.err()) Notification::create(
-                                        level_import.err().value_or("UNK ERROR")
-                                        , NotificationIcon::Error
-                                    )->show();
-                                }
-                            }
-                            else FLAlertLayer::create("Failed to get picked path", result->unwrapErr(), "OK")->show();
-                        }
-                    );
-                    __this->m_pickListener.setFilter(file::pick(file::PickMode::OpenFile, IMPORT_PICK_OPTIONS));
-                }
-            );
-            load_level->setID("export_level"_spr);
-            menu->addChild(load_level);
-
-            CCMenuItemSpriteExtra* edit_level = CCMenuItemExt::createSpriteExtra(
-                btnspr("Edit .level file"),
-                [__this = Ref(this)](auto) {
-                    auto IMPORT_PICK_OPTIONS = file::FilePickOptions{
-                        std::nullopt, {{ "Extended Shared Level File", { "*.level" } }}
-                    };
-                    //IMPORT_PICK_OPTIONS.defaultPath;
-                    __this->m_pickListener.bind([__this](Task<Result<std::filesystem::path>>::Event* event)
-                        {
-                            if (auto result = event->getValue()) if (result->isOk()) {
-                                auto path = result->unwrap();
-                                path = string::endsWith(path.string(), ".level") ? path : std::filesystem::path(path.string() + ".level");
-                                auto level_import = level::importLevelFile(path);
-                                if (level_import.isOk()) {
-                                    auto level = level_import.unwrapOrDefault();
-                                    auto layer = LevelEditorLayer::create(level, 0);
-                                    if (auto menu = layer->getChildByIDRecursive("settings-menu")) {
-
-                                        auto specialSettings = CCMenuItemExt::createSpriteExtraWithFrameName(
-                                            "GJ_optionsBtn_001.png", 0.800f, [layer, path](auto) {
-                                                ConfigureLevelFileDataPopup::create(layer, path)->show();
-                                            }
-                                        );
-                                        menu->addChild(specialSettings);
-
-                                        menu->setContentSize(CCSizeMake(105.f, 45.f));
-                                        menu->setLayout(RowLayout::create()
-                                            ->setCrossAxisOverflow(0)
-                                            ->setGrowCrossAxis(1)
-                                            ->setAxisReverse(1)
-                                        );
-                                    }
-                                    switchToScene(layer);
-                                }
-                                else {
-                                    //aaaa msg
-                                    Notification::create("failed to load level!", NotificationIcon::Warning)->show();
-                                    //and err
-                                    if (level_import.err()) Notification::create(
-                                        level_import.err().value_or("UNK ERROR")
-                                        , NotificationIcon::Error
-                                    )->show();
-                                }
-                            }
-                            else FLAlertLayer::create("Failed to get picked path", result->unwrapErr(), "OK")->show();
-                        }
-                    );
-                    __this->m_pickListener.setFilter(file::pick(file::PickMode::OpenFile, IMPORT_PICK_OPTIONS));
-                }
-            );
-            edit_level->setID("edit_level"_spr);
-            menu->addChild(edit_level);
-
-            CCMenuItemSpriteExtra* export_level = CCMenuItemExt::createSpriteExtra(
-                btnspr("Export into .level file"),
-                [__this = Ref(this)](CCMenuItem*) {
-                    if (!GameManager::get()->getGameLayer()) {
-                        Notification::create("You are not in a level", NotificationIcon::Error)->show();
-                        return;
-                    }
-                    auto level = GameManager::get()->getGameLayer()->m_level;
-                    auto IMPORT_PICK_OPTIONS = file::FilePickOptions{
-                        std::nullopt, {{ "Extended Shared Level File", { "*.level" } }}
-                    };
-                    IMPORT_PICK_OPTIONS.defaultPath = getMod()->getConfigDir() / fmt::format("{}.level", level->m_levelID.value());
-                    __this->m_pickListener.bind([__this, level](Task<Result<std::filesystem::path>>::Event* event)
-                        {
-                            if (auto result = event->getValue()) if (result->isOk()) {
-                                //path
-                                auto path = string::endsWith( //result->unwrap()result->unwrap()result->unwrap()
-                                    result->unwrapOrDefault().string(), ".level" //str ends w .lvl
-                                ) ? result->unwrapOrDefault() : std::filesystem::path(result->unwrapOrDefault().string() + ".level");
-                                //dir
-                                auto dir = path.parent_path();
-                                //exporting.
-                                auto level_export = level::exportLevelFile(level, path);
-                                if (level_export.isOk()) {
-                                    auto dbg_json = level_export.unwrapOrDefault();
-                                    dbg_json["levelString"] = dbg_json["levelString"].asString().unwrapOrDefault().erase(36, 9999999) + "...";
-
-                                    auto body = std::stringstream();
-
-                                    body << """" "`  File:` [" + path.string() + "](file:///" + string::replace(path.string(), " ", "%20") + ")";
-                                    body << "\n";
-                                    body << "\n" "`   Dir:` [" + dir.string() + "](file:///" + string::replace(dir.string(), " ", "%20") + ")";
-                                    body << "\n";
-                                    body << "\n" "```";
-                                    body << "\n" "zip tree of \"" << std::filesystem::path(path).filename().string() << "\": ";
-                                    auto unzip = file::CCMiniZFile::create(string::pathToString(path));
-                                    if (unzip.err()) body
-                                        << "\n" "FAILED TO OPEN CREATED ZIP!"
-                                        << "\n" << unzip.err().value_or("unk err");
-                                    else for (auto entry : unzip.unwrap()->listFiles().unwrapOrDefault()) body
-                                        << "\n- " << entry.c_str();
-                                    body << "\n" "```";
-                                    body << "\n";
-                                    body << "\n" "```";
-                                    body << "\n" "data \"" << std::filesystem::path(path).filename().string() << "\": ";
-                                    for (auto entry : dbg_json) body
-                                        << "\n- " << entry.getKey().value_or("unk") + ": " << entry.dump();
-                                    body << "\n" "```";
-
-                                    MDPopup::create(
-                                        "Level Exported!",
-                                        body.str(),
-                                        "Ok"
-                                    )->show();
-                                }
-                                else {
-                                    //aaaa msg
-                                    Notification::create("failed to save level!", NotificationIcon::Warning)->show();
-                                    //and err
-                                    if (level_export.err()) Notification::create(
-                                        level_export.err().value_or("UNK ERROR")
-                                        , NotificationIcon::Error
-                                    )->show();
-                                    log::error("{}", level_export.err());
-                                }
-                            }
-                            else FLAlertLayer::create("Failed to get picked path", result->unwrapErr(), "OK")->show();
-                        }
-                    );
-                    __this->m_pickListener.setFilter(file::pick(file::PickMode::SaveFile, IMPORT_PICK_OPTIONS));
-                }
-            );
-            export_level->setID("export_level"_spr);
-            menu->addChild(export_level);
-
-            menu->setLayout(ColumnLayout::create()->setAxisReverse(true));
-            limitNodeWidth(menu, this->m_mainLayer->getContentWidth() - 16.f, 1.f, 0.1f);
-
-            return true;
-        }
-
-    public:
-        static Popup* create() {
-            auto ret = new Popup();
-            if (ret->initAnchored(240.000f, 156.000f)) {
-                ret->autorelease();
-                return ret;
-            }
-            delete ret;
-            return nullptr;
-        }
-    };
-    bool init() {
-        if (!MenuLayer::init()) return false;
-        if (!REMOVE_UI) {
-            static auto m_pickListener = new EventListener<Task<Result<std::filesystem::path>>>;
-
-            static Ref<CCNode> icon; 
-            if (icon) return true;
-            icon = createModLogo(getMod());
-
-            static Ref icon_outline = createModLogo(getMod());
-            icon_outline->setScale(1.175f);
-            icon_outline->setZOrder(-1);
-
-            static Ref icon_lightner = createModLogo(getMod());
-            icon_lightner->setZOrder(1);
-
-            auto container = ScrollLayer::create(icon->getContentSize());
-            container->m_contentLayer->addChildAtPosition(icon, Anchor::Center);
-            container->m_contentLayer->addChildAtPosition(icon_lightner, Anchor::Center);
-            container->m_contentLayer->addChildAtPosition(icon_outline, Anchor::Center);
-            container->m_contentLayer->addChildAtPosition(icon_outline, Anchor::Center);
-            container->m_contentLayer->addChildAtPosition(icon_outline, Anchor::Center);
-            container->m_contentLayer->addChildAtPosition(icon_outline, Anchor::Center);
-            container->m_contentLayer->addChildAtPosition(icon_outline, Anchor::Center);
-            container->m_contentLayer->setAnchorPoint(CCPointMake(0.5f, 0.5f));
-            container->m_contentLayer->ignoreAnchorPointForPosition(true);
-            container->m_disableHorizontal = false;
-            container->m_cutContent = false;
-
-            container->setScale(0.0f);
-            container->runAction(CCEaseExponentialOut::create(CCScaleTo::create(1.5f, 0.7f)));
-
-            container->runAction(CCEaseExponentialOut::create(CCMoveBy::create(1.5f, CCPointMake(
-                getMod()->getSavedValue<double>("last-menu-icon-pos-x", 8),
-                getMod()->getSavedValue<double>("last-menu-icon-pos-y", 66)
-            ))));
-
-            container->runAction(CCRepeatForever::create(CCSequence::create(
-                CallFuncExt::create(
-                    [container = Ref(container)]() {
-                        if (REMOVE_UI) {
-                            SceneManager::get()->forget(container);
-                            container->removeFromParent();
-                            return;
-                        }
-                        //zorder
-                        if (auto aw = container->getParent()->getChildByType(-1)) {
-                            container->setZOrder(aw->getZOrder() + 1);
-                        }
-                        //touch prio
-                        if (auto handler = CCTouchDispatcher::get()->findHandler(container)) {
-                            CCTouchDispatcher::get()->setPriority(-1337, handler->getDelegate());
-                        }
-                        //drugs
-                        auto delta = container->m_contentLayer->getPosition();
-                        auto newPos = container->getPosition() + delta;
-                        auto bounds = container->getParent()->boundingBox();
-                        auto size = container->getContentSize();
-                        newPos.x = std::min(std::max(newPos.x, bounds.getMinX()), bounds.getMaxX() - size.width);
-                        newPos.y = std::min(std::max(newPos.y, bounds.getMinY()), bounds.getMaxY() - size.height);
-                        container->setPosition(newPos);
-                        container->m_contentLayer->setPosition(CCPointZero);
-                    }
-                ), CCDelayTime::create(0.001f), 
-                CallFuncExt::create(
-                    [container = Ref(container)]() {
-
-                        getMod()->setSavedValue("last-menu-icon-pos-x", container->getPositionX());
-                        getMod()->setSavedValue("last-menu-icon-pos-y", container->getPositionY());
-
-                        static int clickState; static float clickElapsed; static bool wasDown;
-                        static constexpr float DOUBLE_CLICK_INTERVAL = 0.025f; //0s 0250ms
-
-                        if (clickState == 1) {
-                            clickElapsed += 0.001f;
-                            if (clickElapsed > DOUBLE_CLICK_INTERVAL) clickState = 0;
-                        }
-                        if (wasDown && !container->m_touchDown) {
-                            if (clickState == 1 && clickElapsed <= DOUBLE_CLICK_INTERVAL) {
-                                Popup::create()->show();
-                                clickState = 0;
-                            }
-                            else {
-                                clickState = 1;
-                                clickElapsed = 0.0f;
-                            }
-                        }
-                        wasDown = container->m_touchDown;
-
-                        icon_outline->getChildByType<CCSprite>(0)->setBlendFunc({ GL_SRC_ALPHA, GL_ONE });
-                        icon_outline->setVisible(clickState);
-                        icon_lightner->getChildByType<CCSprite>(0)->setBlendFunc({ GL_SRC_ALPHA, GL_ONE });
-                        icon_lightner->setVisible(clickState);
-                        container->m_contentLayer->setScale(0.9f - 
-                            (container->m_touchDown ? (DOUBLE_CLICK_INTERVAL + clickElapsed) : -0.1f)
-                        );
-                    }
-                ), nullptr
-            )));
-
-            SceneManager::get()->keepAcrossScenes(container);
-        };
-        return true;
-    }
-};
 
 #include <Geode/modify/LocalLevelManager.hpp>
 class $modify(MLE_LocalLevelManager, LocalLevelManager) {
@@ -1019,15 +903,15 @@ class $modify(MLE_LocalLevelManager, LocalLevelManager) {
         log::info("searching for custom settings enforcement file {}...", "settings.json"_spr);
         if (fileExistsInSearchPaths("settings.json"_spr)) {
             log::info("found custom settings enforcement file {}!", "settings.json"_spr);
-            file::writeBinary(
+            if (auto err = file::writeBinary(
                 //settings.json in save dir will be overwritten
                 getMod()->getConfigDir() / "settings.json"_spr,
                 //by readen mod.id/settings.json data
                 file::readBinary(
                     CCFileUtils::get()->fullPathForFilename("settings.json"_spr, 0).c_str()
                 ).unwrapOrDefault()
-            );
-            getMod()->loadData();
+            ).err()) log::error("{}", err);
+            if (auto err = getMod()->loadData().err()) log::error("{}", err);
         }
 
         log::debug("loading .level files by list {}", mle::getListingIDs());
@@ -1121,7 +1005,7 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
 
     virtual void keyDown(cocos2d::enumKeyCodes p0) {
         LevelSelectLayer::keyDown(p0);
-        if (this) if (auto a = getParent()) if (auto scroll = typeinfo_cast<BoomScrollLayer*>(a->getParent())) {
+        if (auto a = getParent()) if (auto scroll = typeinfo_cast<BoomScrollLayer*>(a->getParent())) {
             MLE_LevelSelectExt::ForceNextTo = scroll->pageNumberForPosition(this->getPosition());
         }
     }
@@ -1145,6 +1029,16 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
         }
 
         if (!LevelSelectLayer::init(page)) return false;
+
+        if (!REMOVE_UI) {
+            auto menu = CCMenu::create();
+            menu->setID("menu"_spr);
+            menu->setScale(0.75f);
+            menu->setAnchorPoint(CCPointZero);
+            menu->addChild(MainLevelsEditorMenu::createButtonForMe());
+            addChildAtPosition(menu, Anchor::BottomRight, { -25.f, 25.f }, false);
+            menu->setZOrder(228);
+		}
 
         return true;
     }
@@ -1178,9 +1072,17 @@ class $modify(BoomScrollLayerLevelSelectExt, BoomScrollLayer) {
 #include <Geode/modify/LevelPage.hpp>
 class $modify(MLE_LevelPageExt, LevelPage) {
 
-    void updateDynamicPage(GJGameLevel * p0) {
-        auto level = Ref(p0);
-        LevelPage::updateDynamicPage(level);
+    void customSetup(float) { //dynammic page update function is hell
+        Ref level = this->m_level;
+        if (!level) return;
+        if (!this->getChildByType<GJGameLevel>(0)) this->addChild(level);
+        else {
+            if (level == this->getChildByType<GJGameLevel>(0)) return;
+            else {
+                this->getChildByType<GJGameLevel>(0)->removeFromParent();
+                this->addChild(level);
+            }
+        }
         //difficultySprite
         if (REPLACE_DIFFICULTY_SPRITE) if (auto difficultySprite = typeinfo_cast<CCSprite*>(this->getChildByIDRecursive("difficulty-sprite"))) {
             auto diffID = static_cast<int>(level->m_difficulty);
@@ -1198,16 +1100,23 @@ class $modify(MLE_LevelPageExt, LevelPage) {
         }
         //debg
         if (!REMOVE_UI) {
-            while (auto a = this->getChildByTag(179823)) a->removeFromParent();
+            while (auto a = this->getChildByTag("mle-id-debug"_h)) a->removeFromParent();
             this->addChild(SimpleTextArea::create(fmt::format(
-                "                                                                       id: {}\n \n \n \n \n \n \n "
+                "                                                                       "
+                "id: {}\n \n \n \n \n \n \n "
                 , level->m_levelID.value()
-            )), 1, 179823);
+            )), 1, "mle-id-debug"_h);
         }
     }
 
+    bool init(GJGameLevel* level) {
+		if (!LevelPage::init(level)) return false;
+		this->schedule(schedule_selector(MLE_LevelPageExt::customSetup));
+		return true;
+	}
+
     void onPlay(cocos2d::CCObject * sender) {
-        if (this) if (auto a = getParent()) if (auto scroll = typeinfo_cast<BoomScrollLayer*>(a->getParent())) {
+        if (auto a = getParent()) if (auto scroll = typeinfo_cast<BoomScrollLayer*>(a->getParent())) {
             MLE_LevelSelectExt::LastPlayedPage = scroll->pageNumberForPosition(this->getPosition());
             MLE_LevelSelectExt::LastPlayedPageLevelID = this->m_level->m_levelID.value();
         }
@@ -1216,14 +1125,14 @@ class $modify(MLE_LevelPageExt, LevelPage) {
     }
 
     void onSecretDoor(cocos2d::CCObject * sender) {
-        if (this) if (auto a = getParent()) if (auto scroll = typeinfo_cast<BoomScrollLayer*>(a->getParent())) {
+        if (auto a = getParent()) if (auto scroll = typeinfo_cast<BoomScrollLayer*>(a->getParent())) {
             MLE_LevelSelectExt::ForceNextTo = scroll->pageNumberForPosition(this->getPosition());
         }
         LevelPage::onSecretDoor(sender);
     }
 
     void onTheTower(cocos2d::CCObject * sender) {
-        if (this) if (auto a = getParent()) if (auto scroll = typeinfo_cast<BoomScrollLayer*>(a->getParent())) {
+        if (auto a = getParent()) if (auto scroll = typeinfo_cast<BoomScrollLayer*>(a->getParent())) {
             MLE_LevelSelectExt::ForceNextTo = scroll->pageNumberForPosition(this->getPosition());
         }
         LevelPage::onTheTower(sender);
@@ -1281,4 +1190,30 @@ class $modify(MLE_GameObjectExt, GameObject) {
         }
         return rtn;
     }
+};
+
+#include <Geode/modify/EditorUI.hpp>
+class $modify(MLE_EditorUI, EditorUI) {
+    void onSettings(cocos2d::CCObject * sender) {
+        EditorUI::onSettings(sender);
+        if (auto impinfo = m_editorLayer->m_level->getChildByTag("is-imported-from-file"_h)) {
+            ConfigureLevelFileDataPopup::create(this->m_editorLayer, impinfo->getID())->show();
+        }
+    };
+};
+
+#include <Geode/modify/PauseLayer.hpp>
+class $modify(MLE_PauseExt, PauseLayer) {
+    virtual void customSetup() {
+        PauseLayer::customSetup();
+        if (!REMOVE_UI) {
+            auto menu = CCMenu::create();
+            menu->setID("menu"_spr);
+            menu->setScale(0.75f);
+            menu->setAnchorPoint(CCPointZero);
+            menu->addChild(MainLevelsEditorMenu::createButtonForMe());
+            addChildAtPosition(menu, Anchor::BottomRight, { -25.f, 25.f }, false);
+            menu->setZOrder(228);
+        }
+    };
 };

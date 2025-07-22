@@ -3672,7 +3672,7 @@ extern "C" {
             // Temporarily allocate a read buffer.
             read_buf_size = MZ_MIN(file_stat.m_comp_size, MZ_ZIP_MAX_IO_BUF_SIZE);
 #ifdef _MSC_VER
-            if (((0, sizeof(size_t) == sizeof(mz_uint32))) && (read_buf_size > 0x7FFFFFFF))
+            if (((sizeof(size_t) == sizeof(mz_uint32))) && (read_buf_size > 0x7FFFFFFF))
 #else
             if (((sizeof(size_t) == sizeof(mz_uint32))) && (read_buf_size > 0x7FFFFFFF))
 #endif
@@ -3752,7 +3752,7 @@ extern "C" {
 
         alloc_size = (flags & MZ_ZIP_FLAG_COMPRESSED_DATA) ? comp_size : uncomp_size;
 #ifdef _MSC_VER
-        if (((0, sizeof(size_t) == sizeof(mz_uint32))) && (alloc_size > 0x7FFFFFFF))
+        if (((sizeof(size_t) == sizeof(mz_uint32))) && (alloc_size > 0x7FFFFFFF))
 #else
         if (((sizeof(size_t) == sizeof(mz_uint32))) && (alloc_size > 0x7FFFFFFF))
 #endif
@@ -3842,7 +3842,7 @@ extern "C" {
             if (pZip->m_pState->m_pMem)
             {
 #ifdef _MSC_VER
-                if (((0, sizeof(size_t) == sizeof(mz_uint32))) && (file_stat.m_comp_size > 0xFFFFFFFF))
+                if (((sizeof(size_t) == sizeof(mz_uint32))) && (file_stat.m_comp_size > 0xFFFFFFFF))
 #else
                 if (((sizeof(size_t) == sizeof(mz_uint32))) && (file_stat.m_comp_size > 0xFFFFFFFF))
 #endif
@@ -4060,7 +4060,7 @@ extern "C" {
         mz_zip_internal_state* pState = pZip->m_pState;
         mz_uint64 new_size = MZ_MAX(file_ofs + n, pState->m_mem_size);
 #ifdef _MSC_VER
-        if ((!n) || ((0, sizeof(size_t) == sizeof(mz_uint32)) && (new_size > 0x7FFFFFFF)))
+        if ((!n) || ((sizeof(size_t) == sizeof(mz_uint32)) && (new_size > 0x7FFFFFFF)))
 #else
         if ((!n) || ((sizeof(size_t) == sizeof(mz_uint32)) && (new_size > 0x7FFFFFFF)))
 #endif
