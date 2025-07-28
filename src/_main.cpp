@@ -1053,15 +1053,17 @@ class $modify(BoomScrollLayerLevelSelectExt, BoomScrollLayer) {
             Ref _casted = typeinfo_cast<LevelSelectLayer*>(delegate);
             if (_casted) {
 
-                Ref levels = CCArray::create();
+                Ref level_pages = CCArray::create();
 
                 //LEVELS_LISTING
                 for (auto id : mle::getListingIDs()) {
-                    auto level = Ref(GameLevelManager::get()->getMainLevel(id, 0));
-                    levels->addObject(level);
+                    Ref level = GameLevelManager::get()->getMainLevel(id, 0);
+                    Ref level_page = LevelPage::create(level);
+                    level_page->updateDynamicPage(level);
+                    level_pages->addObject(level_page);
                 }
 
-                return BoomScrollLayer::create(pages, unk1, unk2, levels, _casted);
+                return BoomScrollLayer::create(level_pages, 0, 0, nullptr, nullptr);
             }
         }
 
