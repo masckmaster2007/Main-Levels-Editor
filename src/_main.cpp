@@ -1,8 +1,6 @@
 #include <Geode/Geode.hpp>
 #include <Geode/ui/GeodeUI.hpp>
 
-#include "zip_file.hpp"
-
 using namespace geode::prelude;
 
 #define REMOVE_UI getMod()->getSettingValue<bool>("REMOVE_UI")
@@ -287,10 +285,10 @@ namespace level {
         std::filesystem::create_directories(to.parent_path(), ignored_error);
         std::filesystem::remove(to, ignored_error);
 
-        GEODE_UNWRAP_INTO(auto file, file::CCMiniZFile::create(to.string()));
+        GEODE_UNWRAP_INTO(auto file, file::Zip::create(to.string()));
 
         auto json = jsonFromLevel(level);
-        GEODE_UNWRAP(file->write("_data.json", json.dump()));
+        GEODE_UNWRAP(file.add("_data.json", json.dump()));
 
         //primary song id isnt 0
         if (level->m_songID) {
@@ -301,7 +299,7 @@ namespace level {
             path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
             //add if exists
             if (fileExistsInSearchPaths(path.string().c_str())) {
-                GEODE_UNWRAP(file->write(
+                GEODE_UNWRAP(file.add(
                     std::filesystem::path(path).filename().string()
                     , file::readBinary(path).unwrapOrDefault()
                 ));
@@ -317,7 +315,7 @@ namespace level {
             path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
             //add if exists
             if (fileExistsInSearchPaths(path.string().c_str())) {
-                GEODE_UNWRAP(file->write(
+                GEODE_UNWRAP(file.add(
                     std::filesystem::path(path).filename().string()
                     , file::readBinary(path).unwrapOrDefault()
                 ));
@@ -333,14 +331,12 @@ namespace level {
             path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
             //add if exists
             if (fileExistsInSearchPaths(path.string().c_str())) {
-                GEODE_UNWRAP(file->write(
+                GEODE_UNWRAP(file.add(
                     std::filesystem::path(path).filename().string()
                     , file::readBinary(path).unwrapOrDefault()
                 ));
             }
         }
-
-        GEODE_UNWRAP(file->save());
 
         return Ok(json);
     };
@@ -352,10 +348,10 @@ namespace level {
         if (!level) return Err("level ptr is null.");
         if (!typeinfo_cast<GJGameLevel*>(level)) return Err("level ptr is not GJGameLevel typed in RTTI.");
 
-        GEODE_UNWRAP_INTO(auto file, file::CCMiniZFile::create(from.string()));
+        GEODE_UNWRAP_INTO(auto file, file::Unzip::create(from.string()));
 
-        GEODE_UNWRAP_INTO(auto __data_read, file->read("_data.json"));
-        GEODE_UNWRAP_INTO(auto data, matjson::parse(__data_read));
+        GEODE_UNWRAP_INTO(auto __data_read, file.extract("_data.json"));
+        GEODE_UNWRAP_INTO(auto data, matjson::parse(std::string(__data_read.begin(), __data_read.end())));
         updateLevelByJson(data, level);
 
         //log::debug("data from zip: {}", data.dump());
@@ -367,7 +363,7 @@ namespace level {
             path = CCFileUtils::get()->fullPathForFilename(path.string().c_str(), 0).c_str();
             if (!fileExistsInSearchPaths(path.string().c_str())) {
                 auto atzip = std::filesystem::path(path).filename().string();
-                GEODE_UNWRAP_INTO(auto __data_read, file->readBinary(atzip));
+                GEODE_UNWRAP_INTO(auto __data_read, file.extract(atzip));
                 GEODE_UNWRAP(file::writeBinary(path, __data_read));
             };
         }
@@ -381,7 +377,7 @@ namespace level {
             //add if exists
             if (!fileExistsInSearchPaths(path.string().c_str())) {
                 auto atzip = std::filesystem::path(path).filename().string();
-                GEODE_UNWRAP_INTO(auto __data_read, file->readBinary(atzip));
+                GEODE_UNWRAP_INTO(auto __data_read, file.extract(atzip));
                 GEODE_UNWRAP(file::writeBinary(path, __data_read));
             }
         }
@@ -395,7 +391,7 @@ namespace level {
             //add if exists
             if (!fileExistsInSearchPaths(path.string().c_str())) {
                 auto atzip = std::filesystem::path(path).filename().string();
-                GEODE_UNWRAP_INTO(auto __data_read, file->readBinary(atzip));
+                GEODE_UNWRAP_INTO(auto __data_read, file.extract(atzip));
                 GEODE_UNWRAP(file::writeBinary(path, __data_read));
             }
         }
@@ -818,12 +814,12 @@ protected:
                                 body << "\n";
                                 body << "\n" "```";
                                 body << "\n" "zip tree of \"" << std::filesystem::path(path).filename().string() << "\": ";
-                                auto unzip = file::CCMiniZFile::create(string::pathToString(path));
+                                auto unzip = file::Unzip::create(string::pathToString(path));
                                 if (unzip.err()) body
                                     << "\n" "FAILED TO OPEN CREATED ZIP!"
                                     << "\n" << unzip.err().value_or("unk err");
-                                else for (auto entry : unzip.unwrap()->listFiles().unwrapOrDefault()) body
-                                    << "\n- " << entry.c_str();
+                                else for (auto entry : unzip.unwrap().getEntries()) body
+                                    << "\n- " << string::pathToString(entry);
                                 body << "\n" "```";
                                 body << "\n";
                                 body << "\n" "```";
@@ -949,7 +945,7 @@ class $modify(MLE_LocalLevelManager, LocalLevelManager) {
 class $modify(MLE_GameLevelManager, GameLevelManager) {
 
     GJGameLevel* getMainLevel(int levelID, bool dontGetLevelString) {
-        auto level = GameLevelManager::getMainLevel(levelID, dontGetLevelString);
+        Ref level = GameLevelManager::getMainLevel(levelID, dontGetLevelString);
 
         if (MLE_LocalLevelManager::m_mainLevelsInJSON.contains(levelID)) {
             /*log::debug(
@@ -978,7 +974,6 @@ class $modify(MLE_GameLevelManager, GameLevelManager) {
 
         level->m_levelID = levelID; // -1, -2 for listing exists. no default id pls
         level->m_songID = !level->m_audioTrack ? level->m_songID : 0; // what the fuck why its ever was saved
-        level->m_localOrSaved = true;
         level->m_levelType = GJLevelType::Local;
         level->m_levelString = dontGetLevelString ? "" : level->m_levelString.c_str();
 
@@ -989,6 +984,43 @@ class $modify(MLE_GameLevelManager, GameLevelManager) {
 
 #include <Geode/modify/LevelTools.hpp>
 class $modify(MLE_LevelTools, LevelTools) {
+
+    //paranoic hook
+    static GJGameLevel* getLevel(int levelID, bool dontGetLevelString) {
+        Ref level = LevelTools::getLevel(levelID, dontGetLevelString);
+
+        if (MLE_LocalLevelManager::m_mainLevelsInJSON.contains(levelID)) {
+            /*log::debug(
+                "MLE_LocalLevelManager::m_mainLevelsInJSON[{}]->{}",
+                levelID, MLE_LocalLevelManager::m_mainLevelsInJSON[levelID].dump()
+            );*/
+            auto loadedLevel = GJGameLevel::create();
+            level::updateLevelByJson(MLE_LocalLevelManager::m_mainLevelsInJSON[levelID], loadedLevel);
+            //xd
+            level->m_levelString = loadedLevel->m_levelString.c_str();
+            level->m_stars = (loadedLevel->m_stars.value());
+            level->m_requiredCoins = loadedLevel->m_requiredCoins;
+            level->m_levelName = loadedLevel->m_levelName;
+            level->m_audioTrack = loadedLevel->m_audioTrack;
+            level->m_songID = loadedLevel->m_songID;
+            level->m_songIDs = loadedLevel->m_songIDs;
+            level->m_sfxIDs = loadedLevel->m_sfxIDs;
+            level->m_demon = (loadedLevel->m_demon.value());
+            level->m_twoPlayerMode = loadedLevel->m_twoPlayerMode;
+            level->m_difficulty = loadedLevel->m_difficulty;
+            level->m_capacityString = loadedLevel->m_capacityString;
+            level->m_levelID = (levelID);
+            level->m_timestamp = loadedLevel->m_timestamp;
+            level->m_levelLength = loadedLevel->m_levelLength;
+        };
+
+        level->m_levelID = levelID; // -1, -2 for listing exists. no default id pls
+        level->m_songID = !level->m_audioTrack ? level->m_songID : 0; // what the fuck why its ever was saved
+        level->m_levelType = GJLevelType::Local;
+        level->m_levelString = dontGetLevelString ? "" : level->m_levelString.c_str();
+
+        return level;
+    };
 
     static bool verifyLevelIntegrity(gd::string p0, int p1) {
         return VERIFY_LEVEL_INTEGRITY ? LevelTools::verifyLevelIntegrity(p0, p1) : true;
@@ -1048,30 +1080,14 @@ class $modify(MLE_LevelSelectExt, LevelSelectLayer) {
 #include <Geode/modify/BoomScrollLayer.hpp>
 class $modify(BoomScrollLayerLevelSelectExt, BoomScrollLayer) {
     static BoomScrollLayer* create(cocos2d::CCArray * pages, int unk1, bool unk2, cocos2d::CCArray * unk3, DynamicScrollDelegate * delegate) {
-        
-        if ((uintptr_t)delegate != 0) { //paranoic check
-            Ref _casted = typeinfo_cast<LevelSelectLayer*>(delegate);
-            if (_casted) {
-
-                auto level_pages = CCArray::create();
-                CC_SAFE_RETAIN(level_pages);
-
-                //LEVELS_LISTING
-                for (auto id : mle::getListingIDs()) {
-                    auto level = GameLevelManager::get()->getMainLevel(id, 0);
-                    auto level_page = LevelPage::create(level);
-                    level_page->updateDynamicPage(level);
-                    level_pages->addObject(level_page);
-
-                    CC_SAFE_RETAIN(level);
-                    CC_SAFE_RETAIN(level_page);
-                    CC_SAFE_RETAIN(level_pages);
-                }
-
-                return BoomScrollLayer::create(level_pages, 0, 0, nullptr, nullptr);
-            }
+        if (delegate and unk3) {
+            if (exact_cast<LevelSelectLayer*>(delegate)) { //is created for LevelSelectLayer
+                unk3->removeAllObjects();
+                for (auto id : mle::getListingIDs()) unk3->addObject(
+                    GameLevelManager::get()->getMainLevel(id, 0)
+                );
+            };
         }
-
         return BoomScrollLayer::create(pages, unk1, unk2, unk3, delegate);
     }
 };
