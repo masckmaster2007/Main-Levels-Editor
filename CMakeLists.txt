@@ -15,7 +15,7 @@ endif()
 # my bindings... https://github.com/user95401/bindings
 include("$ENV{GEODE_SDK}/cmake/CPM.cmake")
 CPMAddPackage(NAME "bindings"
-	GITHUB_REPOSITORY "user95401/bindings"
+	GITHUB_REPOSITORY "geode-sdk/bindings"
 	GIT_TAG "main"
 	DOWNLOAD_ONLY YES
 	NO_CACHE YES
