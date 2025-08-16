@@ -712,12 +712,12 @@ namespace mle_ui {
             auto width = contentLayer->getContentWidth();
             //hr
             if (altBg) contentLayer->addChild(CCLayerColor::create(
-                ccColor4B(161 - 20, 88 - 20, 44 - 20, 255),
+                ccColor4B{161 - 20, 88 - 20, 44 - 20, 255},
                 width, 1.00f
             ));
             //item a 
             auto entry = CCLayerColor::create(
-                altBg ? ccColor4B(161, 88, 44, 255) : ccColor4B(194, 114, 62, 255),
+                altBg ? ccColor4B{161, 88, 44, 255} : ccColor4B{194, 114, 62, 255},
                 width, 60.000f
             );
             entry->setLayout(AnchorLayout::create());
@@ -785,7 +785,7 @@ namespace mle_ui {
             );
             //hr
             if (altBg) contentLayer->addChild(CCLayerColor::create(
-                ccColor4B(161 - 20, 88 - 20, 44 - 20, 255),
+                ccColor4B{161 - 20, 88 - 20, 44 - 20, 255},
                 width, 1.00f
             ));
             //sw alt
@@ -1313,7 +1313,7 @@ namespace mle_ui {
                 }
                 auto exist = fs::exists(p0->getString().data());
                 existanceIndicator->setString(exist ? "file\nexists." : "file don't\nexists!");
-                existanceIndicator->setColor(exist ? ccColor3B(85, 255, 100) : ccColor3B(255, 85, 85));
+                existanceIndicator->setColor(exist ? ccColor3B{85, 255, 100} : ccColor3B{255, 85, 85});
             }
             if (p0->getID() == "m_artistID") {
                 CCMenu* browseBtnMenu;
