@@ -47,12 +47,12 @@ class $modify(SongsLayerExt, SongsLayer) {
 		auto width = contentLayer->getContentWidth();
 		//hr
 		if (altBg) contentLayer->addChild(CCLayerColor::create(
-			ccColor4B(161 - 20, 88 - 20, 44 - 20, 255),
+			ccColor4B{161 - 20, 88 - 20, 44 - 20, 255},
 			width, 1.00f
 		));
 		//item a 
 		auto entry = CCLayerColor::create(
-			altBg ? ccColor4B(161, 88, 44, 255) : ccColor4B(194, 114, 62, 255),
+			altBg ? ccColor4B{161, 88, 44, 255} : ccColor4B{194, 114, 62, 255},
 			width, 60.000f
 		);
 		entry->setLayout(AnchorLayout::create());
@@ -124,7 +124,7 @@ class $modify(SongsLayerExt, SongsLayer) {
 		);
 		//hr
 		if (altBg) contentLayer->addChild(CCLayerColor::create(
-			ccColor4B(161 - 20, 88 - 20, 44 - 20, 255),
+			ccColor4B{161 - 20, 88 - 20, 44 - 20, 255},
 			width, 1.00f
 		));
 		//sw alt
