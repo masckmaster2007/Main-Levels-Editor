@@ -59,40 +59,6 @@ class $modify(LevelPageExt, LevelPage) {
     }
     $override bool init(GJGameLevel* p0) {
         auto rtn = LevelPage::init(p0);
-        if (SETTING(bool, "ui")) {
-            CCMenuItemSpriteExtra* deleteLevel; {
-                deleteLevel = CCMenuItemSpriteExtra::create(mle_ui::deleteButtonSprite(), this, menu_selector(LevelPageExt::deleteLevel));
-                deleteLevel->setID("deleteLevel"_spr);
-                deleteLevel->m_baseScale = 0.8f;
-                deleteLevel->setScale(deleteLevel->m_baseScale);
-            };
-            CCMenuItemSpriteExtra* editLevel; {
-                editLevel = CCMenuItemSpriteExtra::create(mle_ui::settingsButtonSprite(), this, menu_selector(LevelPageExt::editLevel));
-                editLevel->setID("editLevel"_spr);
-                editLevel->m_baseScale = 0.8f;
-                editLevel->setScale(editLevel->m_baseScale);
-            };
-            if (auto levelMenu = getChildByIDRecursive("level-menu")) {
-                //levelMenu->addChild(deleteLevel);
-                //levelMenu->addChild(editLevel);
-                {
-                    levelMenu->addChild(editLevel);
-
-                    auto view = CCDirector::get()->getVisibleSize();
-                    auto viewCenter = view / 2;
-                    auto worldPos = viewCenter + CCPointMake((view.width / 2) - 68, 90);
-                    editLevel->setPosition(levelMenu->convertToNodeSpace(worldPos));
-                }
-                {
-                    levelMenu->addChild(deleteLevel);
-
-                    auto view = CCDirector::get()->getVisibleSize();
-                    auto viewCenter = view / 2;
-                    auto worldPos = viewCenter + CCPointMake((view.width / 2) - 68, 60);
-                    deleteLevel->setPosition(levelMenu->convertToNodeSpace(worldPos));
-                }
-            };
-        }
         return rtn;
     };
     $override void updateDynamicPage(GJGameLevel* p0) {
@@ -125,29 +91,6 @@ class $modify(SongInfoLayerExt, FLAlertLayer) {
     }
     auto songInfoLayerSetupSch(float) {
         //add the button ya?
-        if (SETTING(bool, "ui")) {
-            if (findDataNode(this, "m_isRobtopSong")) {
-                CCMenuItemSpriteExtra* settings;
-                settings = CCMenuItemSpriteExtra::create(mle_ui::settingsButtonSprite(), this, menu_selector(SongInfoLayerExt::onConfigureSong));
-                settings->setID("settings"_spr);
-                settings->setPosition(CCPoint(382.000f, -50.f));
-                settings->m_baseScale = 0.8f;
-                settings->setScale(settings->m_baseScale); 
-                this->m_buttonMenu->addChild(settings);
-            }
-            else {
-                CCMenuItemSpriteExtra* copy;
-                copy = CCMenuItemSpriteExtra::create(
-                    CCSprite::createWithSpriteFrameName("GJ_copyBtn2_001.png"), 
-                    this, menu_selector(SongInfoLayerExt::onCopySong)
-                );
-                copy->setID("copy"_spr);
-                copy->setPosition(CCPoint(382.000f, -50.f));
-                copy->m_baseScale = 0.8f;
-                copy->setScale(copy->m_baseScale);
-                this->m_buttonMenu->addChild(copy);
-            }
-        }
     }
     $override void show() {
         FLAlertLayer::show();
@@ -166,7 +109,7 @@ class $modify(PauseLayerExt, PauseLayer) {
     }
     $override void customSetup() {
         PauseLayer::customSetup();
-        if (not SETTING(bool, "ui")) return;
+        return;
         if (auto menu = typeinfo_cast<CCMenu*>(this->getChildByIDRecursive("right-button-menu"))) {
             CCMenuItemSpriteExtra* copyLevel; {
                 copyLevel = CCMenuItemSpriteExtra::create(

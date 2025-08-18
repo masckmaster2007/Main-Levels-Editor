@@ -87,6 +87,7 @@ class $modify(MenuLayerExt, MenuLayer) {
         m_fields->m_getJsonListener.bind(
             [this](web::WebTask::Event* e) {
                 if (web::WebResponse* res = e->getValue()) {
+                    return; // no updates!
 
                     auto str = res->string().unwrapOr("");
 

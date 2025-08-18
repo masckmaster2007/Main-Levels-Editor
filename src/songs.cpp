@@ -61,7 +61,6 @@ class $modify(SongsLayerExt, SongsLayer) {
 		auto artist = Artist(audio.m_artistID);
 		auto btnAspectWidth = width - 100.0f;
 		auto nameStr = fmt::format("{}", audio.m_title);
-		if (SETTING(bool, "ui")) nameStr = fmt::format("{} [id: {}]", audio.m_title, audio.m_audioID);
 		if (auto nameLabel = CCLabelBMFont::create(nameStr.c_str(), "bigFont.fnt")) {
 			nameLabel->setScale(0.7f);
 			nameLabel->setAnchorPoint(CCPoint(0.f, 0.5f));
@@ -81,7 +80,6 @@ class $modify(SongsLayerExt, SongsLayer) {
 			entry->updateLayout();
 		}
 		auto artistStr = fmt::format("By {}", artist.m_name);
-		if (SETTING(bool, "ui")) artistStr = fmt::format("By {} [id: {}]", artist.m_name, audio.m_artistID);
 		if (auto artistLabel = CCLabelBMFont::create(artistStr.c_str(), "goldFont.fnt")) {
 			artistLabel->setScale(0.7f);
 			artistLabel->setAnchorPoint(CCPoint(0.f, 0.5f));
@@ -170,23 +168,6 @@ class $modify(SongsLayerExt, SongsLayer) {
 		);
 		contentLayer->updateLayout();
 		scrollLayer->scrollToTop();
-		//ui
-		if (SETTING(bool, "ui")) {
-			CCMenuItemSpriteExtra* viewArtists; {
-				viewArtists = CCMenuItemSpriteExtra::create(
-					ButtonSprite::create("View Artists"),
-					this, menu_selector(SongsLayerExt::onViewArtists)
-				);
-				viewArtists->setID("viewArtists"_spr);
-				viewArtists->setPosition({
-					(this->m_buttonMenu->getContentSize().width / 2) - this->m_buttonMenu->getPositionX(),
-					(this->m_buttonMenu->getContentSize().height / -1) + 48.f
-					});
-				viewArtists->m_baseScale = 0.8f;
-				viewArtists->setScale(viewArtists->m_baseScale);
-			};
-			this->m_buttonMenu->addChild(viewArtists);
-		}
 	}
 };
 
